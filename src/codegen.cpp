@@ -31,6 +31,12 @@ std::string CodeGen::generate(const Program& prog) {
         if (prog.stmts[i]->kind == NODE_STRING_OUTPUT) {
             StringOutputNode* n = static_cast<StringOutputNode*>(prog.stmts[i]);
             out << "    puts(\"" << escapeString(n->text) << "\");\n";
+        } else if (prog.stmts[i]->kind == NODE_NUMBER_OUTPUT) {
+            NumberOutputNode* n = static_cast<NumberOutputNode*>(prog.stmts[i]);
+            if (n->isFloat)
+                out << "    printf(\"%g\\n\", (double)" << n->raw << ");\n";
+            else
+                out << "    printf(\"%d\\n\", (int)" << n->raw << ");\n";
         }
     }
 

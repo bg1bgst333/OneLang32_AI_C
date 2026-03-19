@@ -17,6 +17,9 @@ Program* Parser::parse() {
         const Token& tok = advance();
         if (tok.kind == TOK_STRING) {
             prog->stmts.push_back(new StringOutputNode(tok.value, tok.line));
+        } else if (tok.kind == TOK_NUMBER) {
+            bool isFloat = tok.value.find('.') != std::string::npos;
+            prog->stmts.push_back(new NumberOutputNode(tok.value, isFloat, tok.line));
         }
     }
     return prog;
