@@ -19,6 +19,8 @@ private:
     const Token& peek() const;
     const Token& advance();
     bool atEnd() const;
+    void skipNewlines();
+    void skipSpacesInTokens();
 };
 
 } // namespace one
