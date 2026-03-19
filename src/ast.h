@@ -10,7 +10,8 @@ enum NodeKind {
     NODE_STRING_OUTPUT,
     NODE_NUMBER_OUTPUT,
     NODE_ASSIGN,      // x = 値
-    NODE_VAR_OUTPUT   // x (変数出力)
+    NODE_VAR_OUTPUT,  // x (変数出力)
+    NODE_INPUT        // x: (標準入力→変数)
 };
 
 struct Node {
@@ -52,6 +53,13 @@ struct VarOutputNode : public Node {
     std::string varName;
     VarOutputNode(const std::string& name, int l)
         : Node(NODE_VAR_OUTPUT, l), varName(name) {}
+};
+
+// 入力ノード: x:
+struct InputNode : public Node {
+    std::string varName;
+    InputNode(const std::string& name, int l)
+        : Node(NODE_INPUT, l), varName(name) {}
 };
 
 struct Program {

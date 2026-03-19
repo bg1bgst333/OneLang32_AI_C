@@ -100,8 +100,9 @@ Token Lexer::nextToken() {
     // クォート付き文字列
     if (c == '"') return readQuotedString();
 
-    // 代入演算子
+    // 代入演算子 / コロン
     if (c == '=') { advance(); return Token(TOK_ASSIGN, "=", line_); }
+    if (c == ':') { advance(); return Token(TOK_COLON,  ":", line_); }
 
     // 負の数値
     if (c == '-' && pos_ + 1 < src_.size() &&
@@ -123,6 +124,7 @@ Token Lexer::nextToken() {
             tmpPos++;
         bool nextIsAssignOrEnd = tmpPos >= src_.size() ||
                                   src_[tmpPos] == '='  ||
+                                  src_[tmpPos] == ':'  ||
                                   src_[tmpPos] == '\n' ||
                                   src_[tmpPos] == '\r';
         if (nextIsAssignOrEnd) return ident;
