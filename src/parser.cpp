@@ -34,7 +34,10 @@ Program* Parser::parse() {
 
         } else if (tok.kind == TOK_IDENT) {
             // x = 値 の代入か、変数出力か
-            if (!atEnd() && tokens_[pos_].kind == TOK_ASSIGN) {
+            if (!atEnd() && tokens_[pos_].kind == TOK_COLON) {
+                advance(); // : を消費
+                prog->stmts.push_back(new InputNode(tok.value, tok.line));
+            } else if (!atEnd() && tokens_[pos_].kind == TOK_ASSIGN) {
                 advance(); // = を消費
                 skipSpacesInTokens();
 

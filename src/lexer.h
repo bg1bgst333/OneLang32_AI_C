@@ -11,6 +11,7 @@ enum TokenKind {
     TOK_NUMBER,   // 数値リテラル (整数・浮動小数)
     TOK_IDENT,    // 識別子 (変数名など)
     TOK_ASSIGN,   // =
+    TOK_COLON,    // :
     TOK_NEWLINE,  // 改行 (文のセパレータ)
     TOK_EOF
 };

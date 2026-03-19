@@ -25,6 +25,7 @@ std::string CodeGen::generate(const Program& prog) {
     std::ostringstream out;
 
     out << "#include <stdio.h>\n";
+    out << "#include <string.h>\n";
     out << "#include <windows.h>\n\n";
     out << "int main(void) {\n";
     out << "    SetConsoleOutputCP(65001);\n";
@@ -65,6 +66,20 @@ std::string CodeGen::generate(const Program& prog) {
                 out << n->varName << " = \"" << escapeString(n->rawValue) << "\";\n";
                 varTypes_[n->varName] = VAL_STRING;
             }
+
+        } else if (node->kind == NODE_INPUT) {
+            InputNode* n = static_cast<InputNode*>(node);
+            std::string buf = "_one_buf_" + n->varName;
+            bool declared = varTypes_.count(n->varName) > 0;
+            if (!declared)
+                out << "    char " << buf << "[1024];\n";
+            out << "    fgets(" << buf << ", sizeof(" << buf << "), stdin);\n";
+            out << "    { size_t _l = strlen(" << buf << "); "
+                << "if (_l > 0 && " << buf << "[_l-1] == '\\n') "
+                << buf << "[_l-1] = '\\0'; }\n";
+            if (!declared)
+                out << "    const char* " << n->varName << " = " << buf << ";\n";
+            varTypes_[n->varName] = VAL_STRING;
 
         } else if (node->kind == NODE_VAR_OUTPUT) {
             VarOutputNode* n = static_cast<VarOutputNode*>(node);
