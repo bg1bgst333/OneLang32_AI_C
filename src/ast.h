@@ -7,7 +7,8 @@
 namespace one {
 
 enum NodeKind {
-    NODE_STRING_OUTPUT
+    NODE_STRING_OUTPUT,
+    NODE_NUMBER_OUTPUT
 };
 
 struct Node {
@@ -22,6 +23,14 @@ struct StringOutputNode : public Node {
     std::string text; // クォートを除いた文字列
     StringOutputNode(const std::string& t, int l)
         : Node(NODE_STRING_OUTPUT, l), text(t) {}
+};
+
+// 数値出力ノード
+struct NumberOutputNode : public Node {
+    std::string raw; // 元のテキスト (例: "42", "3.14")
+    bool isFloat;
+    NumberOutputNode(const std::string& r, bool f, int l)
+        : Node(NODE_NUMBER_OUTPUT, l), raw(r), isFloat(f) {}
 };
 
 struct Program {

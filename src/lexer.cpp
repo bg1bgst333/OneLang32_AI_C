@@ -54,6 +54,21 @@ Token Lexer::readQuotedString() {
     return Token(TOK_STRING, val, startLine);
 }
 
+// 文字列が数値かどうか判定 (整数 or 浮動小数)
+static bool parseNumber(const std::string& s) {
+    if (s.empty()) return false;
+    size_t i = 0;
+    if (s[i] == '-') i++;
+    if (i >= s.size()) return false;
+    bool hasDigit = false;
+    while (i < s.size() && s[i] >= '0' && s[i] <= '9') { i++; hasDigit = true; }
+    if (i < s.size() && s[i] == '.') {
+        i++;
+        while (i < s.size() && s[i] >= '0' && s[i] <= '9') i++;
+    }
+    return hasDigit && i == s.size();
+}
+
 // クォートなし: 行末まで読む
 Token Lexer::readUnquotedLine() {
     int startLine = line_;
@@ -65,6 +80,9 @@ Token Lexer::readUnquotedLine() {
     size_t end = val.find_last_not_of(" \t");
     if (end != std::string::npos)
         val = val.substr(0, end + 1);
+
+    if (parseNumber(val))
+        return Token(TOK_NUMBER, val, startLine);
     return Token(TOK_STRING, val, startLine);
 }
 

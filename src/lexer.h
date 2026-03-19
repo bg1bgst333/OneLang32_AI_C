@@ -8,6 +8,7 @@ namespace one {
 
 enum TokenKind {
     TOK_STRING, // 文字列リテラル（クォートあり/なし）
+    TOK_NUMBER, // 数値リテラル (整数・浮動小数)
     TOK_EOF
 };
 
