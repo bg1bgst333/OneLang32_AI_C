@@ -100,14 +100,20 @@ Token Lexer::nextToken() {
     // クォート付き文字列
     if (c == '"') return readQuotedString();
 
-    // 代入演算子 / コロン
+    // 代入演算子 / コロン / 四則演算子
     if (c == '=') { advance(); return Token(TOK_ASSIGN, "=", line_); }
     if (c == ':') { advance(); return Token(TOK_COLON,  ":", line_); }
+    if (c == '+') { advance(); return Token(TOK_PLUS,   "+", line_); }
+    if (c == '*') { advance(); return Token(TOK_STAR,   "*", line_); }
+    if (c == '/') { advance(); return Token(TOK_SLASH,  "/", line_); }
 
-    // 負の数値
-    if (c == '-' && pos_ + 1 < src_.size() &&
-        std::isdigit((unsigned char)src_[pos_ + 1]))
-        return readNumber();
+    // 負の数値 or マイナス演算子
+    if (c == '-') {
+        if (pos_ + 1 < src_.size() && std::isdigit((unsigned char)src_[pos_ + 1]))
+            return readNumber();
+        advance();
+        return Token(TOK_MINUS, "-", line_);
+    }
 
     // 正の数値
     if (std::isdigit((unsigned char)c)) return readNumber();
@@ -122,12 +128,12 @@ Token Lexer::nextToken() {
         while (tmpPos < src_.size() &&
                (src_[tmpPos] == ' ' || src_[tmpPos] == '\t'))
             tmpPos++;
-        bool nextIsAssignOrEnd = tmpPos >= src_.size() ||
-                                  src_[tmpPos] == '='  ||
-                                  src_[tmpPos] == ':'  ||
-                                  src_[tmpPos] == '\n' ||
-                                  src_[tmpPos] == '\r';
-        if (nextIsAssignOrEnd) return ident;
+        char nc = (tmpPos < src_.size()) ? src_[tmpPos] : '\0';
+        bool nextIsOk = tmpPos >= src_.size() ||
+                        nc == '=' || nc == ':' ||
+                        nc == '+' || nc == '-' || nc == '*' || nc == '/' ||
+                        nc == '\n' || nc == '\r';
+        if (nextIsOk) return ident;
         // そうでなければ行全体をクォートなし文字列として読み直す
         pos_ = saved;
         return readUnquotedLine();

@@ -20,6 +20,41 @@ std::string CodeGen::escapeString(const std::string& s) {
     return out;
 }
 
+// 式をC言語の文字列として生成（未定義変数は0）
+std::string CodeGen::genExpr(const Expr* e) {
+    if (e->kind == EXPR_NUMBER) {
+        return static_cast<const NumberExpr*>(e)->raw;
+    }
+    if (e->kind == EXPR_VAR) {
+        const VarExpr* v = static_cast<const VarExpr*>(e);
+        if (varTypes_.count(v->name) == 0) return "0";
+        if (varTypes_[v->name] == VAL_STRING) return "0"; // 文字列変数は算術に使えない
+        return v->name;
+    }
+    // EXPR_BINARY
+    const BinaryExpr* b = static_cast<const BinaryExpr*>(e);
+    std::string op(1, b->op);
+    return "(" + genExpr(b->left) + " " + op + " " + genExpr(b->right) + ")";
+}
+
+// 式の型を推論（float成分があればVAL_FLOAT、なければVAL_INT）
+ValKind CodeGen::exprType(const Expr* e) {
+    if (e->kind == EXPR_NUMBER) {
+        return static_cast<const NumberExpr*>(e)->isFloat ? VAL_FLOAT : VAL_INT;
+    }
+    if (e->kind == EXPR_VAR) {
+        const VarExpr* v = static_cast<const VarExpr*>(e);
+        if (!varTypes_.count(v->name)) return VAL_INT; // 未定義 → int(0)
+        ValKind vk = varTypes_[v->name];
+        return (vk == VAL_STRING) ? VAL_INT : vk;
+    }
+    // EXPR_BINARY
+    const BinaryExpr* b = static_cast<const BinaryExpr*>(e);
+    ValKind lt = exprType(b->left);
+    ValKind rt = exprType(b->right);
+    return (lt == VAL_FLOAT || rt == VAL_FLOAT) ? VAL_FLOAT : VAL_INT;
+}
+
 std::string CodeGen::generate(const Program& prog) {
     varTypes_.clear();
     std::ostringstream out;
@@ -95,6 +130,40 @@ std::string CodeGen::generate(const Program& prog) {
                 out << "    printf(\"%g\\n\", " << n->varName << ");\n";
             else
                 out << "    puts(" << n->varName << ");\n";
+
+        } else if (node->kind == NODE_EXPR_OUTPUT) {
+            ExprOutputNode* n = static_cast<ExprOutputNode*>(node);
+            // 文字列変数の単独出力は puts
+            if (n->expr->kind == EXPR_VAR) {
+                const VarExpr* v = static_cast<const VarExpr*>(n->expr);
+                if (varTypes_.count(v->name) && varTypes_[v->name] == VAL_STRING) {
+                    out << "    puts(" << v->name << ");\n";
+                    continue;
+                }
+            }
+            ValKind vk = exprType(n->expr);
+            std::string cexpr = genExpr(n->expr);
+            if (vk == VAL_INT)
+                out << "    printf(\"%d\\n\", " << cexpr << ");\n";
+            else
+                out << "    printf(\"%g\\n\", (double)(" << cexpr << "));\n";
+
+        } else if (node->kind == NODE_EXPR_ASSIGN) {
+            ExprAssignNode* n = static_cast<ExprAssignNode*>(node);
+            ValKind vk = exprType(n->expr);
+            std::string cexpr = genExpr(n->expr);
+            bool declared = varTypes_.count(n->varName) > 0;
+            if (vk == VAL_INT) {
+                if (!declared) out << "    int ";
+                else           out << "    ";
+                out << n->varName << " = " << cexpr << ";\n";
+                varTypes_[n->varName] = VAL_INT;
+            } else {
+                if (!declared) out << "    double ";
+                else           out << "    ";
+                out << n->varName << " = " << cexpr << ";\n";
+                varTypes_[n->varName] = VAL_FLOAT;
+            }
         }
     }
 
