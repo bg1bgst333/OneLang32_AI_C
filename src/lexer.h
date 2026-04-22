@@ -12,6 +12,10 @@ enum TokenKind {
     TOK_IDENT,    // 識別子 (変数名など)
     TOK_ASSIGN,   // =
     TOK_COLON,    // :
+    TOK_PLUS,     // +
+    TOK_MINUS,    // -
+    TOK_STAR,     // *
+    TOK_SLASH,    // /
     TOK_NEWLINE,  // 改行 (文のセパレータ)
     TOK_EOF
 };

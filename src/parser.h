@@ -17,10 +17,15 @@ private:
     size_t pos_;
 
     const Token& peek() const;
+    const Token& peekAt(size_t offset) const;
     const Token& advance();
     bool atEnd() const;
     void skipNewlines();
     void skipSpacesInTokens();
+    bool isExprOp(TokenKind k) const;
+    Expr* parseExpr();
+    Expr* parseTerm();
+    Expr* parsePrimary();
 };
 
 } // namespace one
