@@ -16,6 +16,12 @@ enum TokenKind {
     TOK_MINUS,    // -
     TOK_STAR,     // *
     TOK_SLASH,    // /
+    TOK_GT,       // >
+    TOK_LT,       // <
+    TOK_GTE,      // >=
+    TOK_LTE,      // <=
+    TOK_NEQ,      // !=
+    TOK_ARROW,    // ->
     TOK_NEWLINE,  // 改行 (文のセパレータ)
     TOK_EOF
 };
