@@ -13,7 +13,8 @@ enum NodeKind {
     NODE_VAR_OUTPUT,   // x (変数出力)
     NODE_INPUT,        // x: (標準入力→変数)
     NODE_EXPR_OUTPUT,  // 式の評価・出力
-    NODE_EXPR_ASSIGN   // 変数 = 式（代入）
+    NODE_EXPR_ASSIGN,  // 変数 = 式（代入）
+    NODE_COND          // 条件 -> 実行
 };
 
 struct Node {
@@ -112,6 +113,20 @@ struct ExprAssignNode : Node {
     ExprAssignNode(const std::string& n, Expr* e, int l)
         : Node(NODE_EXPR_ASSIGN, l), varName(n), expr(e) {}
     ~ExprAssignNode() { delete expr; }
+};
+
+// 比較演算子
+enum CompOp { CMP_EQ, CMP_NEQ, CMP_GT, CMP_LT, CMP_GTE, CMP_LTE };
+
+// 条件実行ノード: 式 比較演算子 式 -> 実行内容
+struct CondNode : public Node {
+    Expr* left;
+    CompOp op;
+    Expr* right;
+    Node* body;
+    CondNode(Expr* l, CompOp o, Expr* r, Node* b, int line)
+        : Node(NODE_COND, line), left(l), op(o), right(r), body(b) {}
+    ~CondNode() { delete left; delete right; delete body; }
 };
 
 // ─────────────────────────────────────────────────────────

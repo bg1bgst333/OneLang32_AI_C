@@ -107,16 +107,57 @@ Token Lexer::nextToken() {
     if (c == '*') { advance(); return Token(TOK_STAR,   "*", line_); }
     if (c == '/') { advance(); return Token(TOK_SLASH,  "/", line_); }
 
-    // 負の数値 or マイナス演算子
+    // -> アロー演算子 or 負の数値 or マイナス
     if (c == '-') {
+        if (pos_ + 1 < src_.size() && src_[pos_ + 1] == '>') {
+            advance(); advance();
+            return Token(TOK_ARROW, "->", line_);
+        }
         if (pos_ + 1 < src_.size() && std::isdigit((unsigned char)src_[pos_ + 1]))
             return readNumber();
         advance();
         return Token(TOK_MINUS, "-", line_);
     }
 
-    // 正の数値
-    if (std::isdigit((unsigned char)c)) return readNumber();
+    // > >=
+    if (c == '>') {
+        advance();
+        if (!atEnd() && peek() == '=') { advance(); return Token(TOK_GTE, ">=", line_); }
+        return Token(TOK_GT, ">", line_);
+    }
+
+    // < <=
+    if (c == '<') {
+        advance();
+        if (!atEnd() && peek() == '=') { advance(); return Token(TOK_LTE, "<=", line_); }
+        return Token(TOK_LT, "<", line_);
+    }
+
+    // !=
+    if (c == '!') {
+        if (pos_ + 1 < src_.size() && src_[pos_ + 1] == '=') {
+            advance(); advance();
+            return Token(TOK_NEQ, "!=", line_);
+        }
+        return readUnquotedLine();
+    }
+
+    // 正の数値（後ろが演算子/空白/改行でない場合はクォートなし文字列として扱う）
+    if (std::isdigit((unsigned char)c)) {
+        size_t saved = pos_;
+        Token numTok = readNumber();
+        if (!atEnd()) {
+            char nc2 = peek();
+            bool afterOk = nc2 == ' ' || nc2 == '\t' || nc2 == '\n' || nc2 == '\r' ||
+                           nc2 == '+' || nc2 == '-' || nc2 == '*' || nc2 == '/' ||
+                           nc2 == '>' || nc2 == '<' || nc2 == '!' || nc2 == '=';
+            if (!afterOk) {
+                pos_ = saved;
+                return readUnquotedLine();
+            }
+        }
+        return numTok;
+    }
 
     // 識別子か判定:
     // 英字/アンダースコアで始まり、後ろが = か 行末なら識別子、それ以外はクォートなし文字列
@@ -132,6 +173,7 @@ Token Lexer::nextToken() {
         bool nextIsOk = tmpPos >= src_.size() ||
                         nc == '=' || nc == ':' ||
                         nc == '+' || nc == '-' || nc == '*' || nc == '/' ||
+                        nc == '>' || nc == '<' || nc == '!' ||
                         nc == '\n' || nc == '\r';
         if (nextIsOk) return ident;
         // そうでなければ行全体をクォートなし文字列として読み直す

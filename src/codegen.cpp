@@ -55,6 +55,129 @@ ValKind CodeGen::exprType(const Expr* e) {
     return (lt == VAL_FLOAT || rt == VAL_FLOAT) ? VAL_FLOAT : VAL_INT;
 }
 
+void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& indent) {
+    if (node->kind == NODE_STRING_OUTPUT) {
+        StringOutputNode* n = static_cast<StringOutputNode*>(node);
+        out << indent << "puts(\"" << escapeString(n->text) << "\");\n";
+
+    } else if (node->kind == NODE_NUMBER_OUTPUT) {
+        NumberOutputNode* n = static_cast<NumberOutputNode*>(node);
+        if (n->isFloat)
+            out << indent << "printf(\"%g\\n\", (double)" << n->raw << ");\n";
+        else
+            out << indent << "printf(\"%d\\n\", (int)" << n->raw << ");\n";
+
+    } else if (node->kind == NODE_ASSIGN) {
+        AssignNode* n = static_cast<AssignNode*>(node);
+        bool declared = varTypes_.count(n->varName) > 0;
+        if (n->valKind == VAL_INT) {
+            out << indent << (declared ? "" : "int ") << n->varName << " = " << n->rawValue << ";\n";
+            varTypes_[n->varName] = VAL_INT;
+        } else if (n->valKind == VAL_FLOAT) {
+            out << indent << (declared ? "" : "double ") << n->varName << " = " << n->rawValue << ";\n";
+            varTypes_[n->varName] = VAL_FLOAT;
+        } else {
+            out << indent << (declared ? "" : "const char* ") << n->varName << " = \"" << escapeString(n->rawValue) << "\";\n";
+            varTypes_[n->varName] = VAL_STRING;
+        }
+
+    } else if (node->kind == NODE_INPUT) {
+        InputNode* n = static_cast<InputNode*>(node);
+        std::string buf = "_one_buf_" + n->varName;
+        bool declared = varTypes_.count(n->varName) > 0;
+        if (!declared)
+            out << indent << "char " << buf << "[1024];\n";
+        out << indent << "fgets(" << buf << ", sizeof(" << buf << "), stdin);\n";
+        out << indent << "{ size_t _l = strlen(" << buf << "); "
+            << "if (_l > 0 && " << buf << "[_l-1] == '\\n') "
+            << buf << "[_l-1] = '\\0'; }\n";
+        if (!declared)
+            out << indent << "const char* " << n->varName << " = " << buf << ";\n";
+        varTypes_[n->varName] = VAL_STRING;
+
+    } else if (node->kind == NODE_VAR_OUTPUT) {
+        VarOutputNode* n = static_cast<VarOutputNode*>(node);
+        if (varTypes_.count(n->varName) == 0) {
+            std::ostringstream ss;
+            ss << "line " << n->line << ": undefined variable '" << n->varName << "'";
+            throw std::runtime_error(ss.str());
+        }
+        ValKind vk = varTypes_[n->varName];
+        if (vk == VAL_INT)
+            out << indent << "printf(\"%d\\n\", " << n->varName << ");\n";
+        else if (vk == VAL_FLOAT)
+            out << indent << "printf(\"%g\\n\", " << n->varName << ");\n";
+        else
+            out << indent << "puts(" << n->varName << ");\n";
+
+    } else if (node->kind == NODE_EXPR_OUTPUT) {
+        ExprOutputNode* n = static_cast<ExprOutputNode*>(node);
+        if (n->expr->kind == EXPR_VAR) {
+            const VarExpr* v = static_cast<const VarExpr*>(n->expr);
+            if (varTypes_.count(v->name) && varTypes_[v->name] == VAL_STRING) {
+                out << indent << "puts(" << v->name << ");\n";
+                return;
+            }
+        }
+        ValKind vk = exprType(n->expr);
+        std::string cexpr = genExpr(n->expr);
+        if (vk == VAL_INT)
+            out << indent << "printf(\"%d\\n\", " << cexpr << ");\n";
+        else
+            out << indent << "printf(\"%g\\n\", (double)(" << cexpr << "));\n";
+
+    } else if (node->kind == NODE_EXPR_ASSIGN) {
+        ExprAssignNode* n = static_cast<ExprAssignNode*>(node);
+        ValKind vk = exprType(n->expr);
+        std::string cexpr = genExpr(n->expr);
+        bool declared = varTypes_.count(n->varName) > 0;
+        if (vk == VAL_INT) {
+            out << indent << (declared ? "" : "int ") << n->varName << " = " << cexpr << ";\n";
+            varTypes_[n->varName] = VAL_INT;
+        } else {
+            out << indent << (declared ? "" : "double ") << n->varName << " = " << cexpr << ";\n";
+            varTypes_[n->varName] = VAL_FLOAT;
+        }
+
+    } else if (node->kind == NODE_COND) {
+        CondNode* n = static_cast<CondNode*>(node);
+
+        // 条件本体で未宣言変数に代入する場合、if文の外で事前宣言する
+        if (n->body->kind == NODE_EXPR_ASSIGN) {
+            ExprAssignNode* b = static_cast<ExprAssignNode*>(n->body);
+            if (varTypes_.count(b->varName) == 0) {
+                ValKind vk = exprType(b->expr);
+                if (vk == VAL_INT)   out << indent << "int " << b->varName << " = 0;\n";
+                else                 out << indent << "double " << b->varName << " = 0.0;\n";
+                varTypes_[b->varName] = vk;
+            }
+        } else if (n->body->kind == NODE_ASSIGN) {
+            AssignNode* b = static_cast<AssignNode*>(n->body);
+            if (varTypes_.count(b->varName) == 0) {
+                if (b->valKind == VAL_INT)         out << indent << "int " << b->varName << " = 0;\n";
+                else if (b->valKind == VAL_FLOAT)  out << indent << "double " << b->varName << " = 0.0;\n";
+                else                               out << indent << "const char* " << b->varName << " = \"\";\n";
+                varTypes_[b->varName] = b->valKind;
+            }
+        }
+
+        std::string left = genExpr(n->left);
+        std::string right = genExpr(n->right);
+        const char* op = "==";
+        switch (n->op) {
+            case CMP_EQ:  op = "=="; break;
+            case CMP_NEQ: op = "!="; break;
+            case CMP_GT:  op = ">";  break;
+            case CMP_LT:  op = "<";  break;
+            case CMP_GTE: op = ">="; break;
+            case CMP_LTE: op = "<="; break;
+        }
+        out << indent << "if (" << left << " " << op << " " << right << ") {\n";
+        emitStmt(out, n->body, indent + "    ");
+        out << indent << "}\n";
+    }
+}
+
 std::string CodeGen::generate(const Program& prog) {
     varTypes_.clear();
     std::ostringstream out;
@@ -65,107 +188,8 @@ std::string CodeGen::generate(const Program& prog) {
     out << "int main(void) {\n";
     out << "    SetConsoleOutputCP(65001);\n";
 
-    for (size_t i = 0; i < prog.stmts.size(); i++) {
-        Node* node = prog.stmts[i];
-
-        if (node->kind == NODE_STRING_OUTPUT) {
-            StringOutputNode* n = static_cast<StringOutputNode*>(node);
-            out << "    puts(\"" << escapeString(n->text) << "\");\n";
-
-        } else if (node->kind == NODE_NUMBER_OUTPUT) {
-            NumberOutputNode* n = static_cast<NumberOutputNode*>(node);
-            if (n->isFloat)
-                out << "    printf(\"%g\\n\", (double)" << n->raw << ");\n";
-            else
-                out << "    printf(\"%d\\n\", (int)" << n->raw << ");\n";
-
-        } else if (node->kind == NODE_ASSIGN) {
-            AssignNode* n = static_cast<AssignNode*>(node);
-            bool declared = varTypes_.count(n->varName) > 0;
-
-            if (n->valKind == VAL_INT) {
-                if (!declared) out << "    int ";
-                else           out << "    ";
-                out << n->varName << " = " << n->rawValue << ";\n";
-                varTypes_[n->varName] = VAL_INT;
-
-            } else if (n->valKind == VAL_FLOAT) {
-                if (!declared) out << "    double ";
-                else           out << "    ";
-                out << n->varName << " = " << n->rawValue << ";\n";
-                varTypes_[n->varName] = VAL_FLOAT;
-
-            } else { // VAL_STRING
-                if (!declared) out << "    const char* ";
-                else           out << "    ";
-                out << n->varName << " = \"" << escapeString(n->rawValue) << "\";\n";
-                varTypes_[n->varName] = VAL_STRING;
-            }
-
-        } else if (node->kind == NODE_INPUT) {
-            InputNode* n = static_cast<InputNode*>(node);
-            std::string buf = "_one_buf_" + n->varName;
-            bool declared = varTypes_.count(n->varName) > 0;
-            if (!declared)
-                out << "    char " << buf << "[1024];\n";
-            out << "    fgets(" << buf << ", sizeof(" << buf << "), stdin);\n";
-            out << "    { size_t _l = strlen(" << buf << "); "
-                << "if (_l > 0 && " << buf << "[_l-1] == '\\n') "
-                << buf << "[_l-1] = '\\0'; }\n";
-            if (!declared)
-                out << "    const char* " << n->varName << " = " << buf << ";\n";
-            varTypes_[n->varName] = VAL_STRING;
-
-        } else if (node->kind == NODE_VAR_OUTPUT) {
-            VarOutputNode* n = static_cast<VarOutputNode*>(node);
-            if (varTypes_.count(n->varName) == 0) {
-                std::ostringstream ss;
-                ss << "line " << n->line << ": undefined variable '" << n->varName << "'";
-                throw std::runtime_error(ss.str());
-            }
-            ValKind vk = varTypes_[n->varName];
-            if (vk == VAL_INT)
-                out << "    printf(\"%d\\n\", " << n->varName << ");\n";
-            else if (vk == VAL_FLOAT)
-                out << "    printf(\"%g\\n\", " << n->varName << ");\n";
-            else
-                out << "    puts(" << n->varName << ");\n";
-
-        } else if (node->kind == NODE_EXPR_OUTPUT) {
-            ExprOutputNode* n = static_cast<ExprOutputNode*>(node);
-            // 文字列変数の単独出力は puts
-            if (n->expr->kind == EXPR_VAR) {
-                const VarExpr* v = static_cast<const VarExpr*>(n->expr);
-                if (varTypes_.count(v->name) && varTypes_[v->name] == VAL_STRING) {
-                    out << "    puts(" << v->name << ");\n";
-                    continue;
-                }
-            }
-            ValKind vk = exprType(n->expr);
-            std::string cexpr = genExpr(n->expr);
-            if (vk == VAL_INT)
-                out << "    printf(\"%d\\n\", " << cexpr << ");\n";
-            else
-                out << "    printf(\"%g\\n\", (double)(" << cexpr << "));\n";
-
-        } else if (node->kind == NODE_EXPR_ASSIGN) {
-            ExprAssignNode* n = static_cast<ExprAssignNode*>(node);
-            ValKind vk = exprType(n->expr);
-            std::string cexpr = genExpr(n->expr);
-            bool declared = varTypes_.count(n->varName) > 0;
-            if (vk == VAL_INT) {
-                if (!declared) out << "    int ";
-                else           out << "    ";
-                out << n->varName << " = " << cexpr << ";\n";
-                varTypes_[n->varName] = VAL_INT;
-            } else {
-                if (!declared) out << "    double ";
-                else           out << "    ";
-                out << n->varName << " = " << cexpr << ";\n";
-                varTypes_[n->varName] = VAL_FLOAT;
-            }
-        }
-    }
+    for (size_t i = 0; i < prog.stmts.size(); i++)
+        emitStmt(out, prog.stmts[i], "    ");
 
     out << "    return 0;\n";
     out << "}\n";

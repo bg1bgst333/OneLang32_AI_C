@@ -23,9 +23,14 @@ private:
     void skipNewlines();
     void skipSpacesInTokens();
     bool isExprOp(TokenKind k) const;
+    bool isCompOp(TokenKind k) const;
+    bool lineHasArrow() const;
     Expr* parseExpr();
     Expr* parseTerm();
     Expr* parsePrimary();
+    Node* parseOneStmt();
+    CondNode* parseCondStatement(int line);
+    Node* parseCondBody(int line);
 };
 
 } // namespace one
