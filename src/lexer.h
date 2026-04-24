@@ -22,6 +22,8 @@ enum TokenKind {
     TOK_LTE,      // <=
     TOK_NEQ,      // !=
     TOK_ARROW,    // ->
+    TOK_LBRACE,   // {
+    TOK_RBRACE,   // }
     TOK_NEWLINE,  // 改行 (文のセパレータ)
     TOK_EOF
 };

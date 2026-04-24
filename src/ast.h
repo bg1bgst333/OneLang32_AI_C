@@ -14,7 +14,8 @@ enum NodeKind {
     NODE_INPUT,        // x: (標準入力→変数)
     NODE_EXPR_OUTPUT,  // 式の評価・出力
     NODE_EXPR_ASSIGN,  // 変数 = 式（代入）
-    NODE_COND          // 条件 -> 実行
+    NODE_COND,         // 条件 -> 実行
+    NODE_BLOCK         // { 複数文 }
 };
 
 struct Node {
@@ -127,6 +128,15 @@ struct CondNode : public Node {
     CondNode(Expr* l, CompOp o, Expr* r, Node* b, int line)
         : Node(NODE_COND, line), left(l), op(o), right(r), body(b) {}
     ~CondNode() { delete left; delete right; delete body; }
+};
+
+// ブロックノード: { 文1; 文2; ... }
+struct BlockNode : public Node {
+    std::vector<Node*> stmts;
+    explicit BlockNode(int l) : Node(NODE_BLOCK, l) {}
+    ~BlockNode() {
+        for (size_t i = 0; i < stmts.size(); i++) delete stmts[i];
+    }
 };
 
 // ─────────────────────────────────────────────────────────
