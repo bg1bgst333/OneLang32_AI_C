@@ -81,8 +81,29 @@ Node* Parser::parseCondBody(int line) {
         advance();
         skipNewlines();
     }
+    // ブロック形式: { ... }
+    if (!atEnd() && peek().kind == TOK_LBRACE) {
+        return parseBlock(line);
+    }
     Node* n = parseOneStmt();
     return n ? n : new StringOutputNode("", line);
+}
+
+Node* Parser::parseBlock(int line) {
+    advance(); // { を消費
+    BlockNode* block = new BlockNode(line);
+    while (!atEnd() && peek().kind != TOK_RBRACE) {
+        skipNewlines();
+        if (atEnd() || peek().kind == TOK_RBRACE) break;
+        Node* n = parseOneStmt();
+        if (n) block->stmts.push_back(n);
+        // 行末まで読み飛ばす（余分なトークンは無視）
+        while (!atEnd() && peek().kind != TOK_NEWLINE && peek().kind != TOK_RBRACE)
+            advance();
+    }
+    if (!atEnd() && peek().kind == TOK_RBRACE)
+        advance(); // } を消費
+    return block;
 }
 
 // 加減算（低優先度）

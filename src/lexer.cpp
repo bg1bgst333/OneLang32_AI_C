@@ -133,6 +133,10 @@ Token Lexer::nextToken() {
         return Token(TOK_LT, "<", line_);
     }
 
+    // ブロック括弧
+    if (c == '{') { advance(); return Token(TOK_LBRACE, "{", line_); }
+    if (c == '}') { advance(); return Token(TOK_RBRACE, "}", line_); }
+
     // !=
     if (c == '!') {
         if (pos_ + 1 < src_.size() && src_[pos_ + 1] == '=') {

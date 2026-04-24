@@ -31,6 +31,7 @@ private:
     Node* parseOneStmt();
     CondNode* parseCondStatement(int line);
     Node* parseCondBody(int line);
+    Node* parseBlock(int line);
 };
 
 } // namespace one
