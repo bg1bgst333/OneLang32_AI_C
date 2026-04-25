@@ -100,18 +100,37 @@ Token Lexer::nextToken() {
     // クォート付き文字列
     if (c == '"') return readQuotedString();
 
-    // 代入演算子 / コロン / 四則演算子
+    // セミコロン
+    if (c == ';') { advance(); return Token(TOK_SEMICOLON, ";", line_); }
+
+    // 代入演算子 / コロン / 四則演算子（複合代入を先にチェック）
     if (c == '=') { advance(); return Token(TOK_ASSIGN, "=", line_); }
     if (c == ':') { advance(); return Token(TOK_COLON,  ":", line_); }
-    if (c == '+') { advance(); return Token(TOK_PLUS,   "+", line_); }
-    if (c == '*') { advance(); return Token(TOK_STAR,   "*", line_); }
-    if (c == '/') { advance(); return Token(TOK_SLASH,  "/", line_); }
+    if (c == '+') {
+        advance();
+        if (!atEnd() && peek() == '=') { advance(); return Token(TOK_PLUS_ASSIGN,  "+=", line_); }
+        return Token(TOK_PLUS, "+", line_);
+    }
+    if (c == '*') {
+        advance();
+        if (!atEnd() && peek() == '=') { advance(); return Token(TOK_STAR_ASSIGN,  "*=", line_); }
+        return Token(TOK_STAR, "*", line_);
+    }
+    if (c == '/') {
+        advance();
+        if (!atEnd() && peek() == '=') { advance(); return Token(TOK_SLASH_ASSIGN, "/=", line_); }
+        return Token(TOK_SLASH, "/", line_);
+    }
 
-    // -> アロー演算子 or 負の数値 or マイナス
+    // -> / -= / 負の数値 / マイナス
     if (c == '-') {
         if (pos_ + 1 < src_.size() && src_[pos_ + 1] == '>') {
             advance(); advance();
             return Token(TOK_ARROW, "->", line_);
+        }
+        if (pos_ + 1 < src_.size() && src_[pos_ + 1] == '=') {
+            advance(); advance();
+            return Token(TOK_MINUS_ASSIGN, "-=", line_);
         }
         if (pos_ + 1 < src_.size() && std::isdigit((unsigned char)src_[pos_ + 1]))
             return readNumber();
@@ -162,7 +181,7 @@ Token Lexer::nextToken() {
             bool afterOk = nc2 == ' ' || nc2 == '\t' || nc2 == '\n' || nc2 == '\r' ||
                            nc2 == '+' || nc2 == '-' || nc2 == '*' || nc2 == '/' ||
                            nc2 == '>' || nc2 == '<' || nc2 == '!' || nc2 == '=' ||
-                           nc2 == ')' || nc2 == '&' || nc2 == '|';
+                           nc2 == ')' || nc2 == '&' || nc2 == '|' || nc2 == ';';
             if (!afterOk) {
                 pos_ = saved;
                 return readUnquotedLine();
@@ -190,7 +209,7 @@ Token Lexer::nextToken() {
                         nc == '=' || nc == ':' ||
                         nc == '+' || nc == '-' || nc == '*' || nc == '/' ||
                         nc == '>' || nc == '<' || nc == '!' ||
-                        nc == ')' || nc == '&' || nc == '|' ||
+                        nc == ')' || nc == '&' || nc == '|' || nc == ';' ||
                         nc == '\n' || nc == '\r';
         if (nextIsOk) return ident;
         // そうでなければ行全体をクォートなし文字列として読み直す
