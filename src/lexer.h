@@ -24,6 +24,7 @@ enum TokenKind {
     TOK_ARROW,    // ->
     TOK_LBRACE,   // {
     TOK_RBRACE,   // }
+    TOK_LOOP,     // o (ループキーワード)
     TOK_NEWLINE,  // 改行 (文のセパレータ)
     TOK_EOF
 };

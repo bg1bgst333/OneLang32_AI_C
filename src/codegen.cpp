@@ -165,6 +165,33 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
         for (size_t i = 0; i < n->stmts.size(); i++)
             emitStmt(out, n->stmts[i], indent);
 
+    } else if (node->kind == NODE_LOOP) {
+        LoopNode* n = static_cast<LoopNode*>(node);
+
+        // ループ本体で未宣言変数に代入する場合、while文の外で事前宣言する
+        if (n->body->kind == NODE_BLOCK) {
+            BlockNode* blk = static_cast<BlockNode*>(n->body);
+            for (size_t i = 0; i < blk->stmts.size(); i++)
+                preDeclare(out, blk->stmts[i], indent);
+        } else {
+            preDeclare(out, n->body, indent);
+        }
+
+        std::string left = genExpr(n->left);
+        std::string right = genExpr(n->right);
+        const char* op = "==";
+        switch (n->op) {
+            case CMP_EQ:  op = "=="; break;
+            case CMP_NEQ: op = "!="; break;
+            case CMP_GT:  op = ">";  break;
+            case CMP_LT:  op = "<";  break;
+            case CMP_GTE: op = ">="; break;
+            case CMP_LTE: op = "<="; break;
+        }
+        out << indent << "while (" << left << " " << op << " " << right << ") {\n";
+        emitStmt(out, n->body, indent + "    ");
+        out << indent << "}\n";
+
     } else if (node->kind == NODE_COND) {
         CondNode* n = static_cast<CondNode*>(node);
 

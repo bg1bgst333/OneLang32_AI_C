@@ -25,11 +25,13 @@ private:
     bool isExprOp(TokenKind k) const;
     bool isCompOp(TokenKind k) const;
     bool lineHasArrow() const;
+    bool lineHasLoop() const;
     Expr* parseExpr();
     Expr* parseTerm();
     Expr* parsePrimary();
     Node* parseOneStmt();
     CondNode* parseCondStatement(int line);
+    LoopNode* parseLoopStatement(int line);
     Node* parseCondBody(int line);
     Node* parseBlock(int line);
 };

@@ -15,6 +15,7 @@ enum NodeKind {
     NODE_EXPR_OUTPUT,  // 式の評価・出力
     NODE_EXPR_ASSIGN,  // 変数 = 式（代入）
     NODE_COND,         // 条件 -> 実行
+    NODE_LOOP,         // 条件 o { ループ }
     NODE_BLOCK         // { 複数文 }
 };
 
@@ -128,6 +129,17 @@ struct CondNode : public Node {
     CondNode(Expr* l, CompOp o, Expr* r, Node* b, int line)
         : Node(NODE_COND, line), left(l), op(o), right(r), body(b) {}
     ~CondNode() { delete left; delete right; delete body; }
+};
+
+// ループノード: 式 比較演算子 式 o { 処理 }
+struct LoopNode : public Node {
+    Expr* left;
+    CompOp op;
+    Expr* right;
+    Node* body;
+    LoopNode(Expr* l, CompOp o, Expr* r, Node* b, int line)
+        : Node(NODE_LOOP, line), left(l), op(o), right(r), body(b) {}
+    ~LoopNode() { delete left; delete right; delete body; }
 };
 
 // ブロックノード: { 文1; 文2; ... }

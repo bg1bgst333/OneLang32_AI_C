@@ -168,6 +168,10 @@ Token Lexer::nextToken() {
     if (std::isalpha((unsigned char)c) || c == '_') {
         size_t saved = pos_;
         Token ident = readIdent();
+        // キーワードチェック
+        if (ident.value == "o") {
+            return Token(TOK_LOOP, "o", ident.line);
+        }
         // 識別子の後ろ（スペース除く）を確認
         size_t tmpPos = pos_;
         while (tmpPos < src_.size() &&
