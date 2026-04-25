@@ -26,12 +26,14 @@ private:
     bool isCompOp(TokenKind k) const;
     bool lineHasArrow() const;
     bool lineHasLoop() const;
-    Expr* parseExpr();
-    Expr* parseTerm();
-    Expr* parsePrimary();
+    Expr* parseLogicExpr();   // & |
+    Expr* parseCompareExpr(); // 比較演算子
+    Expr* parseExpr();        // + -
+    Expr* parseTerm();        // * /
+    Expr* parsePrimary();     // 数値・変数・括弧・!
+    Expr* parseCondExpr();    // 条件全体（論理式）
     Node* parseOneStmt();
-    CondNode* parseCondStatement(int line);
-    LoopNode* parseLoopStatement(int line);
+    Node* parseCondOrLoop(int line);
     Node* parseCondBody(int line);
     Node* parseBlock(int line);
 };

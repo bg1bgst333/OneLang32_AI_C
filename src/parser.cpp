@@ -52,74 +52,109 @@ bool Parser::lineHasLoop() const {
     return false;
 }
 
-CondNode* Parser::parseCondStatement(int line) {
-    Expr* left = parseExpr();
+// ── 式パーサー ────────────────────────────────────────────
 
-    if (!isCompOp(peek().kind)) {
-        std::ostringstream ss;
-        ss << "line " << peek().line << ": expected comparison operator";
-        throw std::runtime_error(ss.str());
+// 基本要素: 数値・変数・(論理式)・!式
+Expr* Parser::parsePrimary() {
+    // 論理NOT: ! 式
+    if (peek().kind == TOK_NOT) {
+        advance();
+        Expr* operand = parsePrimary();
+        return new NotExpr(operand);
     }
-    CompOp op;
-    switch (peek().kind) {
-        case TOK_ASSIGN: op = CMP_EQ;  break;
-        case TOK_NEQ:    op = CMP_NEQ; break;
-        case TOK_GT:     op = CMP_GT;  break;
-        case TOK_LT:     op = CMP_LT;  break;
-        case TOK_GTE:    op = CMP_GTE; break;
-        case TOK_LTE:    op = CMP_LTE; break;
-        default:         op = CMP_EQ;  break;
+    // 括弧: ( 論理式 )
+    if (peek().kind == TOK_LPAREN) {
+        advance(); // (
+        Expr* e = parseLogicExpr();
+        if (!atEnd() && peek().kind == TOK_RPAREN)
+            advance(); // )
+        else {
+            std::ostringstream ss;
+            ss << "line " << peek().line << ": expected ')'";
+            throw std::runtime_error(ss.str());
+        }
+        return e;
     }
-    advance(); // 比較演算子を消費
-
-    Expr* right = parseExpr();
-
-    if (peek().kind != TOK_ARROW) {
-        std::ostringstream ss;
-        ss << "line " << peek().line << ": expected '->'";
-        throw std::runtime_error(ss.str());
+    if (peek().kind == TOK_NUMBER) {
+        const Token& t = advance();
+        bool isFloat = t.value.find('.') != std::string::npos;
+        return new NumberExpr(t.value, isFloat);
     }
-    advance(); // -> を消費
-
-    Node* body = parseCondBody(line);
-    return new CondNode(left, op, right, body, line);
+    if (peek().kind == TOK_IDENT) {
+        std::string name = advance().value;
+        return new VarExpr(name);
+    }
+    std::ostringstream ss;
+    ss << "line " << peek().line << ": unexpected token '" << peek().value << "' in expression";
+    throw std::runtime_error(ss.str());
 }
 
-LoopNode* Parser::parseLoopStatement(int line) {
-    Expr* left = parseExpr();
-
-    if (!isCompOp(peek().kind)) {
-        std::ostringstream ss;
-        ss << "line " << peek().line << ": expected comparison operator";
-        throw std::runtime_error(ss.str());
+// 乗除算
+Expr* Parser::parseTerm() {
+    Expr* left = parsePrimary();
+    while (!atEnd() && (peek().kind == TOK_STAR || peek().kind == TOK_SLASH)) {
+        char op = (peek().kind == TOK_STAR) ? '*' : '/';
+        advance();
+        Expr* right = parsePrimary();
+        left = new BinaryExpr(op, left, right);
     }
-    CompOp op;
-    switch (peek().kind) {
-        case TOK_ASSIGN: op = CMP_EQ;  break;
-        case TOK_NEQ:    op = CMP_NEQ; break;
-        case TOK_GT:     op = CMP_GT;  break;
-        case TOK_LT:     op = CMP_LT;  break;
-        case TOK_GTE:    op = CMP_GTE; break;
-        case TOK_LTE:    op = CMP_LTE; break;
-        default:         op = CMP_EQ;  break;
-    }
-    advance(); // 比較演算子を消費
-
-    Expr* right = parseExpr();
-
-    if (peek().kind != TOK_LOOP) {
-        std::ostringstream ss;
-        ss << "line " << peek().line << ": expected 'o'";
-        throw std::runtime_error(ss.str());
-    }
-    advance(); // o を消費
-
-    Node* body = parseCondBody(line);
-    return new LoopNode(left, op, right, body, line);
+    return left;
 }
+
+// 加減算
+Expr* Parser::parseExpr() {
+    Expr* left = parseTerm();
+    while (!atEnd() && (peek().kind == TOK_PLUS || peek().kind == TOK_MINUS)) {
+        char op = (peek().kind == TOK_PLUS) ? '+' : '-';
+        advance();
+        Expr* right = parseTerm();
+        left = new BinaryExpr(op, left, right);
+    }
+    return left;
+}
+
+// 比較式: 式 比較演算子 式
+Expr* Parser::parseCompareExpr() {
+    Expr* left = parseExpr();
+    if (!atEnd() && isCompOp(peek().kind)) {
+        CompOp op;
+        switch (peek().kind) {
+            case TOK_ASSIGN: op = CMP_EQ;  break;
+            case TOK_NEQ:    op = CMP_NEQ; break;
+            case TOK_GT:     op = CMP_GT;  break;
+            case TOK_LT:     op = CMP_LT;  break;
+            case TOK_GTE:    op = CMP_GTE; break;
+            case TOK_LTE:    op = CMP_LTE; break;
+            default:         op = CMP_EQ;  break;
+        }
+        advance();
+        Expr* right = parseExpr();
+        return new CompareExpr(op, left, right);
+    }
+    return left;
+}
+
+// 論理式: 比較式 & 比較式 / 比較式 | 比較式
+Expr* Parser::parseLogicExpr() {
+    Expr* left = parseCompareExpr();
+    while (!atEnd() && (peek().kind == TOK_AND || peek().kind == TOK_OR)) {
+        char op = (peek().kind == TOK_AND) ? '&' : '|';
+        advance();
+        Expr* right = parseCompareExpr();
+        left = new LogicExpr(op, left, right);
+    }
+    return left;
+}
+
+// 条件式全体 (論理式レベル)
+Expr* Parser::parseCondExpr() {
+    return parseLogicExpr();
+}
+
+// ── 文パーサー ────────────────────────────────────────────
 
 Node* Parser::parseCondBody(int line) {
-    // 折り返し形式: -> の後に改行があれば次行を本体とする
+    // -> / o の後に改行があれば折り返し
     if (!atEnd() && peek().kind == TOK_NEWLINE) {
         advance();
         skipNewlines();
@@ -140,7 +175,6 @@ Node* Parser::parseBlock(int line) {
         if (atEnd() || peek().kind == TOK_RBRACE) break;
         Node* n = parseOneStmt();
         if (n) block->stmts.push_back(n);
-        // 行末まで読み飛ばす（余分なトークンは無視）
         while (!atEnd() && peek().kind != TOK_NEWLINE && peek().kind != TOK_RBRACE)
             advance();
     }
@@ -149,46 +183,23 @@ Node* Parser::parseBlock(int line) {
     return block;
 }
 
-// 加減算（低優先度）
-Expr* Parser::parseExpr() {
-    Expr* left = parseTerm();
-    while (!atEnd() && (peek().kind == TOK_PLUS || peek().kind == TOK_MINUS)) {
-        TokenKind k = peek().kind;
-        advance();
-        char op = (k == TOK_PLUS) ? '+' : '-';
-        Expr* right = parseTerm();
-        left = new BinaryExpr(op, left, right);
-    }
-    return left;
-}
+// 条件/ループ共通: 条件式を解析して -> か o で分岐
+Node* Parser::parseCondOrLoop(int line) {
+    Expr* cond = parseCondExpr();
 
-// 乗除算（高優先度）
-Expr* Parser::parseTerm() {
-    Expr* left = parsePrimary();
-    while (!atEnd() && (peek().kind == TOK_STAR || peek().kind == TOK_SLASH)) {
-        TokenKind k = peek().kind;
-        advance();
-        char op = (k == TOK_STAR) ? '*' : '/';
-        Expr* right = parsePrimary();
-        left = new BinaryExpr(op, left, right);
+    if (!atEnd() && peek().kind == TOK_ARROW) {
+        advance(); // -> を消費
+        Node* body = parseCondBody(line);
+        return new CondNode(cond, body, line);
+    } else if (!atEnd() && peek().kind == TOK_LOOP) {
+        advance(); // o を消費
+        Node* body = parseCondBody(line);
+        return new LoopNode(cond, body, line);
+    } else {
+        std::ostringstream ss;
+        ss << "line " << peek().line << ": expected '->' or 'o'";
+        throw std::runtime_error(ss.str());
     }
-    return left;
-}
-
-// 基本要素
-Expr* Parser::parsePrimary() {
-    if (peek().kind == TOK_NUMBER) {
-        const Token& t = advance();
-        bool isFloat = t.value.find('.') != std::string::npos;
-        return new NumberExpr(t.value, isFloat);
-    }
-    if (peek().kind == TOK_IDENT) {
-        std::string name = advance().value;
-        return new VarExpr(name);
-    }
-    std::ostringstream ss;
-    ss << "line " << peek().line << ": unexpected token '" << peek().value << "' in expression";
-    throw std::runtime_error(ss.str());
 }
 
 Node* Parser::parseOneStmt() {
@@ -206,8 +217,13 @@ Node* Parser::parseOneStmt() {
         advance();
         return new StringOutputNode(text, startLine);
 
+    } else if (firstKind == TOK_LPAREN || firstKind == TOK_NOT) {
+        // ( や ! で始まる → 条件/ループ
+        return parseCondOrLoop(startLine);
+
     } else if (firstKind == TOK_NUMBER) {
-        // 数値または数値式 → 出力
+        if (lineHasArrow() || lineHasLoop())
+            return parseCondOrLoop(startLine);
         Expr* e = parseExpr();
         if (!atEnd() && peek().kind == TOK_ASSIGN) advance(); // 末尾 = を消費
         return new ExprOutputNode(e, startLine);
@@ -221,13 +237,9 @@ Node* Parser::parseOneStmt() {
             advance(); advance(); // ident, :
             return new InputNode(varName, startLine);
 
-        } else if (nextKind == TOK_ASSIGN && lineHasLoop()) {
-            // x = 式 o { } → ループ
-            return parseLoopStatement(startLine);
-
-        } else if (nextKind == TOK_ASSIGN && lineHasArrow()) {
-            // x = 式 -> 実行 → 条件実行
-            return parseCondStatement(startLine);
+        } else if (nextKind == TOK_ASSIGN && (lineHasArrow() || lineHasLoop())) {
+            // x = 式 -> / x = 式 o → 条件/ループ
+            return parseCondOrLoop(startLine);
 
         } else if (nextKind == TOK_ASSIGN) {
             // x = ... → 代入
@@ -242,10 +254,9 @@ Node* Parser::parseOneStmt() {
                 return new ExprAssignNode(varName, e, startLine);
             }
 
-        } else if (isCompOp(nextKind) && nextKind != TOK_ASSIGN) {
-            // x > 式 o { } / x > 式 -> 実行
-            if (lineHasLoop()) return parseLoopStatement(startLine);
-            return parseCondStatement(startLine);
+        } else if (lineHasArrow() || lineHasLoop()) {
+            // x op 式 -> / x op 式 o (比較・算術を含む条件式)
+            return parseCondOrLoop(startLine);
 
         } else {
             // 変数単独出力 or 式出力

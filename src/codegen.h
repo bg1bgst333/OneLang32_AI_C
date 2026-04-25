@@ -15,6 +15,7 @@ private:
     std::map<std::string, ValKind> varTypes_; // 宣言済み変数と型
     std::string escapeString(const std::string& s);
     std::string genExpr(const Expr* e);
+    std::string genBoolExpr(const Expr* e);
     ValKind exprType(const Expr* e);
     void preDeclare(std::ostringstream& out, Node* node, const std::string& indent);
     void emitStmt(std::ostringstream& out, Node* node, const std::string& indent);
