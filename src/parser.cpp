@@ -42,6 +42,16 @@ bool Parser::lineHasArrow() const {
     return false;
 }
 
+bool Parser::lineHasLoop() const {
+    for (size_t i = pos_; i < tokens_.size(); i++) {
+        if (tokens_[i].kind == TOK_NEWLINE || tokens_[i].kind == TOK_EOF)
+            return false;
+        if (tokens_[i].kind == TOK_LOOP)
+            return true;
+    }
+    return false;
+}
+
 CondNode* Parser::parseCondStatement(int line) {
     Expr* left = parseExpr();
 
@@ -73,6 +83,39 @@ CondNode* Parser::parseCondStatement(int line) {
 
     Node* body = parseCondBody(line);
     return new CondNode(left, op, right, body, line);
+}
+
+LoopNode* Parser::parseLoopStatement(int line) {
+    Expr* left = parseExpr();
+
+    if (!isCompOp(peek().kind)) {
+        std::ostringstream ss;
+        ss << "line " << peek().line << ": expected comparison operator";
+        throw std::runtime_error(ss.str());
+    }
+    CompOp op;
+    switch (peek().kind) {
+        case TOK_ASSIGN: op = CMP_EQ;  break;
+        case TOK_NEQ:    op = CMP_NEQ; break;
+        case TOK_GT:     op = CMP_GT;  break;
+        case TOK_LT:     op = CMP_LT;  break;
+        case TOK_GTE:    op = CMP_GTE; break;
+        case TOK_LTE:    op = CMP_LTE; break;
+        default:         op = CMP_EQ;  break;
+    }
+    advance(); // 比較演算子を消費
+
+    Expr* right = parseExpr();
+
+    if (peek().kind != TOK_LOOP) {
+        std::ostringstream ss;
+        ss << "line " << peek().line << ": expected 'o'";
+        throw std::runtime_error(ss.str());
+    }
+    advance(); // o を消費
+
+    Node* body = parseCondBody(line);
+    return new LoopNode(left, op, right, body, line);
 }
 
 Node* Parser::parseCondBody(int line) {
@@ -178,6 +221,10 @@ Node* Parser::parseOneStmt() {
             advance(); advance(); // ident, :
             return new InputNode(varName, startLine);
 
+        } else if (nextKind == TOK_ASSIGN && lineHasLoop()) {
+            // x = 式 o { } → ループ
+            return parseLoopStatement(startLine);
+
         } else if (nextKind == TOK_ASSIGN && lineHasArrow()) {
             // x = 式 -> 実行 → 条件実行
             return parseCondStatement(startLine);
@@ -196,7 +243,8 @@ Node* Parser::parseOneStmt() {
             }
 
         } else if (isCompOp(nextKind) && nextKind != TOK_ASSIGN) {
-            // x > 式 -> 実行 など（= 以外の比較演算子）
+            // x > 式 o { } / x > 式 -> 実行
+            if (lineHasLoop()) return parseLoopStatement(startLine);
             return parseCondStatement(startLine);
 
         } else {
