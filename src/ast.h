@@ -69,7 +69,7 @@ struct InputNode : public Node {
 
 // ── 式ノード ──────────────────────────────────────────────
 
-enum ExprKind { EXPR_NUMBER, EXPR_VAR, EXPR_BINARY };
+enum ExprKind { EXPR_NUMBER, EXPR_VAR, EXPR_BINARY, EXPR_COMPARE, EXPR_LOGIC, EXPR_NOT };
 
 struct Expr {
     ExprKind kind;
@@ -120,26 +120,49 @@ struct ExprAssignNode : Node {
 // 比較演算子
 enum CompOp { CMP_EQ, CMP_NEQ, CMP_GT, CMP_LT, CMP_GTE, CMP_LTE };
 
-// 条件実行ノード: 式 比較演算子 式 -> 実行内容
-struct CondNode : public Node {
-    Expr* left;
+// 比較式: 式 比較演算子 式
+struct CompareExpr : Expr {
     CompOp op;
+    Expr* left;
     Expr* right;
-    Node* body;
-    CondNode(Expr* l, CompOp o, Expr* r, Node* b, int line)
-        : Node(NODE_COND, line), left(l), op(o), right(r), body(b) {}
-    ~CondNode() { delete left; delete right; delete body; }
+    CompareExpr(CompOp o, Expr* l, Expr* r)
+        : Expr(EXPR_COMPARE), op(o), left(l), right(r) {}
+    ~CompareExpr() { delete left; delete right; }
 };
 
-// ループノード: 式 比較演算子 式 o { 処理 }
-struct LoopNode : public Node {
+// 論理式: 式 & 式 / 式 | 式
+struct LogicExpr : Expr {
+    char op; // '&' or '|'
     Expr* left;
-    CompOp op;
     Expr* right;
+    LogicExpr(char o, Expr* l, Expr* r)
+        : Expr(EXPR_LOGIC), op(o), left(l), right(r) {}
+    ~LogicExpr() { delete left; delete right; }
+};
+
+// 論理NOT式: ! 式
+struct NotExpr : Expr {
+    Expr* operand;
+    explicit NotExpr(Expr* e) : Expr(EXPR_NOT), operand(e) {}
+    ~NotExpr() { delete operand; }
+};
+
+// 条件実行ノード: 条件式 -> 実行内容
+struct CondNode : public Node {
+    Expr* cond;
     Node* body;
-    LoopNode(Expr* l, CompOp o, Expr* r, Node* b, int line)
-        : Node(NODE_LOOP, line), left(l), op(o), right(r), body(b) {}
-    ~LoopNode() { delete left; delete right; delete body; }
+    CondNode(Expr* c, Node* b, int line)
+        : Node(NODE_COND, line), cond(c), body(b) {}
+    ~CondNode() { delete cond; delete body; }
+};
+
+// ループノード: 条件式 o { 処理 }
+struct LoopNode : public Node {
+    Expr* cond;
+    Node* body;
+    LoopNode(Expr* c, Node* b, int line)
+        : Node(NODE_LOOP, line), cond(c), body(b) {}
+    ~LoopNode() { delete cond; delete body; }
 };
 
 // ブロックノード: { 文1; 文2; ... }

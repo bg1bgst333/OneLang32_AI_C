@@ -20,6 +20,38 @@ std::string CodeGen::escapeString(const std::string& s) {
     return out;
 }
 
+// 条件式をC言語の文字列として生成
+std::string CodeGen::genBoolExpr(const Expr* e) {
+    if (e->kind == EXPR_COMPARE) {
+        const CompareExpr* c = static_cast<const CompareExpr*>(e);
+        std::string left  = genExpr(c->left);
+        std::string right = genExpr(c->right);
+        const char* op = "==";
+        switch (c->op) {
+            case CMP_EQ:  op = "=="; break;
+            case CMP_NEQ: op = "!="; break;
+            case CMP_GT:  op = ">";  break;
+            case CMP_LT:  op = "<";  break;
+            case CMP_GTE: op = ">="; break;
+            case CMP_LTE: op = "<="; break;
+        }
+        return "(" + left + " " + op + " " + right + ")";
+    }
+    if (e->kind == EXPR_LOGIC) {
+        const LogicExpr* l = static_cast<const LogicExpr*>(e);
+        std::string left  = genBoolExpr(l->left);
+        std::string right = genBoolExpr(l->right);
+        std::string op = (l->op == '&') ? "&&" : "||";
+        return "(" + left + " " + op + " " + right + ")";
+    }
+    if (e->kind == EXPR_NOT) {
+        const NotExpr* n = static_cast<const NotExpr*>(e);
+        return "(!" + genBoolExpr(n->operand) + ")";
+    }
+    // 算術式は非ゼロで真
+    return genExpr(e);
+}
+
 // 式をC言語の文字列として生成（未定義変数は0）
 std::string CodeGen::genExpr(const Expr* e) {
     if (e->kind == EXPR_NUMBER) {
@@ -177,18 +209,7 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
             preDeclare(out, n->body, indent);
         }
 
-        std::string left = genExpr(n->left);
-        std::string right = genExpr(n->right);
-        const char* op = "==";
-        switch (n->op) {
-            case CMP_EQ:  op = "=="; break;
-            case CMP_NEQ: op = "!="; break;
-            case CMP_GT:  op = ">";  break;
-            case CMP_LT:  op = "<";  break;
-            case CMP_GTE: op = ">="; break;
-            case CMP_LTE: op = "<="; break;
-        }
-        out << indent << "while (" << left << " " << op << " " << right << ") {\n";
+        out << indent << "while (" << genBoolExpr(n->cond) << ") {\n";
         emitStmt(out, n->body, indent + "    ");
         out << indent << "}\n";
 
@@ -204,18 +225,7 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
             preDeclare(out, n->body, indent);
         }
 
-        std::string left = genExpr(n->left);
-        std::string right = genExpr(n->right);
-        const char* op = "==";
-        switch (n->op) {
-            case CMP_EQ:  op = "=="; break;
-            case CMP_NEQ: op = "!="; break;
-            case CMP_GT:  op = ">";  break;
-            case CMP_LT:  op = "<";  break;
-            case CMP_GTE: op = ">="; break;
-            case CMP_LTE: op = "<="; break;
-        }
-        out << indent << "if (" << left << " " << op << " " << right << ") {\n";
+        out << indent << "if (" << genBoolExpr(n->cond) << ") {\n";
         emitStmt(out, n->body, indent + "    ");
         out << indent << "}\n";
     }

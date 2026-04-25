@@ -133,17 +133,24 @@ Token Lexer::nextToken() {
         return Token(TOK_LT, "<", line_);
     }
 
-    // ブロック括弧
-    if (c == '{') { advance(); return Token(TOK_LBRACE, "{", line_); }
-    if (c == '}') { advance(); return Token(TOK_RBRACE, "}", line_); }
+    // ブロック括弧・丸括弧
+    if (c == '{') { advance(); return Token(TOK_LBRACE,  "{", line_); }
+    if (c == '}') { advance(); return Token(TOK_RBRACE,  "}", line_); }
+    if (c == '(') { advance(); return Token(TOK_LPAREN,  "(", line_); }
+    if (c == ')') { advance(); return Token(TOK_RPAREN,  ")", line_); }
 
-    // !=
+    // 論理演算子
+    if (c == '&') { advance(); return Token(TOK_AND, "&", line_); }
+    if (c == '|') { advance(); return Token(TOK_OR,  "|", line_); }
+
+    // != / ! (論理NOT)
     if (c == '!') {
         if (pos_ + 1 < src_.size() && src_[pos_ + 1] == '=') {
             advance(); advance();
             return Token(TOK_NEQ, "!=", line_);
         }
-        return readUnquotedLine();
+        advance();
+        return Token(TOK_NOT, "!", line_);
     }
 
     // 正の数値（後ろが演算子/空白/改行でない場合はクォートなし文字列として扱う）
@@ -154,7 +161,8 @@ Token Lexer::nextToken() {
             char nc2 = peek();
             bool afterOk = nc2 == ' ' || nc2 == '\t' || nc2 == '\n' || nc2 == '\r' ||
                            nc2 == '+' || nc2 == '-' || nc2 == '*' || nc2 == '/' ||
-                           nc2 == '>' || nc2 == '<' || nc2 == '!' || nc2 == '=';
+                           nc2 == '>' || nc2 == '<' || nc2 == '!' || nc2 == '=' ||
+                           nc2 == ')' || nc2 == '&' || nc2 == '|';
             if (!afterOk) {
                 pos_ = saved;
                 return readUnquotedLine();
@@ -182,6 +190,7 @@ Token Lexer::nextToken() {
                         nc == '=' || nc == ':' ||
                         nc == '+' || nc == '-' || nc == '*' || nc == '/' ||
                         nc == '>' || nc == '<' || nc == '!' ||
+                        nc == ')' || nc == '&' || nc == '|' ||
                         nc == '\n' || nc == '\r';
         if (nextIsOk) return ident;
         // そうでなければ行全体をクォートなし文字列として読み直す
