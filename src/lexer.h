@@ -26,10 +26,15 @@ enum TokenKind {
     TOK_RBRACE,   // }
     TOK_LPAREN,   // (
     TOK_RPAREN,   // )
-    TOK_AND,      // &
-    TOK_OR,       // |
-    TOK_NOT,      // ! (論理NOT、!= とは別)
-    TOK_LOOP,     // o (ループキーワード)
+    TOK_AND,          // &
+    TOK_OR,           // |
+    TOK_NOT,          // ! (論理NOT、!= とは別)
+    TOK_LOOP,         // o (ループキーワード)
+    TOK_SEMICOLON,    // ;
+    TOK_PLUS_ASSIGN,  // +=
+    TOK_MINUS_ASSIGN, // -=
+    TOK_STAR_ASSIGN,  // *=
+    TOK_SLASH_ASSIGN, // /=
     TOK_NEWLINE,  // 改行 (文のセパレータ)
     TOK_EOF
 };

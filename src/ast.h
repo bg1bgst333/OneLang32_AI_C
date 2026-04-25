@@ -14,9 +14,11 @@ enum NodeKind {
     NODE_INPUT,        // x: (標準入力→変数)
     NODE_EXPR_OUTPUT,  // 式の評価・出力
     NODE_EXPR_ASSIGN,  // 変数 = 式（代入）
-    NODE_COND,         // 条件 -> 実行
-    NODE_LOOP,         // 条件 o { ループ }
-    NODE_BLOCK         // { 複数文 }
+    NODE_COND,             // 条件 -> 実行
+    NODE_LOOP,             // 条件 o { ループ }
+    NODE_FOR,              // init; cond; incr o { ループ }
+    NODE_COMPOUND_ASSIGN,  // x += 式
+    NODE_BLOCK             // { 複数文 }
 };
 
 struct Node {
@@ -163,6 +165,27 @@ struct LoopNode : public Node {
     LoopNode(Expr* c, Node* b, int line)
         : Node(NODE_LOOP, line), cond(c), body(b) {}
     ~LoopNode() { delete cond; delete body; }
+};
+
+// forループノード: init; cond; incr o { 処理 }
+struct ForNode : public Node {
+    Node* init;   // NULL可
+    Expr* cond;   // NULL可
+    Node* incr;   // NULL可
+    Node* body;
+    ForNode(Node* i, Expr* c, Node* k, Node* b, int line)
+        : Node(NODE_FOR, line), init(i), cond(c), incr(k), body(b) {}
+    ~ForNode() { delete init; delete cond; delete incr; delete body; }
+};
+
+// 複合代入ノード: x += 式 / x -= 式 / x *= 式 / x /= 式
+struct CompoundAssignNode : public Node {
+    std::string varName;
+    char op; // '+' '-' '*' '/'
+    Expr* expr;
+    CompoundAssignNode(const std::string& n, char o, Expr* e, int l)
+        : Node(NODE_COMPOUND_ASSIGN, l), varName(n), op(o), expr(e) {}
+    ~CompoundAssignNode() { delete expr; }
 };
 
 // ブロックノード: { 文1; 文2; ... }

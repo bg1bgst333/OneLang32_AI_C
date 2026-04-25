@@ -52,6 +52,21 @@ bool Parser::lineHasLoop() const {
     return false;
 }
 
+int Parser::lineSemicolonCount() const {
+    int count = 0;
+    for (size_t i = pos_; i < tokens_.size(); i++) {
+        if (tokens_[i].kind == TOK_NEWLINE || tokens_[i].kind == TOK_EOF) break;
+        if (tokens_[i].kind == TOK_LOOP) break; // o の手前まで
+        if (tokens_[i].kind == TOK_SEMICOLON) count++;
+    }
+    return count;
+}
+
+bool Parser::isCompoundAssignOp(TokenKind k) const {
+    return k == TOK_PLUS_ASSIGN || k == TOK_MINUS_ASSIGN ||
+           k == TOK_STAR_ASSIGN || k == TOK_SLASH_ASSIGN;
+}
+
 // ── 式パーサー ────────────────────────────────────────────
 
 // 基本要素: 数値・変数・(論理式)・!式
@@ -183,6 +198,71 @@ Node* Parser::parseBlock(int line) {
     return block;
 }
 
+// init/incr用: 代入 (x=式) または複合代入 (x+=式)
+Node* Parser::parseLoopClause(int line) {
+    if (peek().kind != TOK_IDENT) {
+        std::ostringstream ss;
+        ss << "line " << peek().line << ": expected variable in loop clause";
+        throw std::runtime_error(ss.str());
+    }
+    std::string varName = advance().value;
+    if (peek().kind == TOK_ASSIGN) {
+        advance();
+        Expr* e = parseExpr();
+        return new ExprAssignNode(varName, e, line);
+    } else if (isCompoundAssignOp(peek().kind)) {
+        char op;
+        switch (peek().kind) {
+            case TOK_PLUS_ASSIGN:  op = '+'; break;
+            case TOK_MINUS_ASSIGN: op = '-'; break;
+            case TOK_STAR_ASSIGN:  op = '*'; break;
+            default:               op = '/'; break;
+        }
+        advance();
+        Expr* e = parseExpr();
+        return new CompoundAssignNode(varName, op, e, line);
+    }
+    std::ostringstream ss;
+    ss << "line " << peek().line << ": expected '=' or compound assign in loop clause";
+    throw std::runtime_error(ss.str());
+}
+
+// for ループ: cond; incr o { } / init; cond; incr o { }
+Node* Parser::parseForLoop(int line) {
+    int semiCount = lineSemicolonCount();
+
+    Node* init = NULL;
+    Expr* cond = NULL;
+    Node* incr = NULL;
+
+    if (semiCount >= 2) {
+        // init; cond; incr o { }
+        init = parseLoopClause(line);
+        advance(); // ; を消費
+        if (peek().kind != TOK_SEMICOLON)
+            cond = parseCondExpr();
+        advance(); // ; を消費
+        if (peek().kind != TOK_LOOP)
+            incr = parseLoopClause(line);
+    } else {
+        // cond; incr o { }
+        cond = parseCondExpr();
+        advance(); // ; を消費
+        if (peek().kind != TOK_LOOP)
+            incr = parseLoopClause(line);
+    }
+
+    if (peek().kind != TOK_LOOP) {
+        std::ostringstream ss;
+        ss << "line " << peek().line << ": expected 'o'";
+        throw std::runtime_error(ss.str());
+    }
+    advance(); // o を消費
+
+    Node* body = parseCondBody(line);
+    return new ForNode(init, cond, incr, body, line);
+}
+
 // 条件/ループ共通: 条件式を解析して -> か o で分岐
 Node* Parser::parseCondOrLoop(int line) {
     Expr* cond = parseCondExpr();
@@ -218,10 +298,14 @@ Node* Parser::parseOneStmt() {
         return new StringOutputNode(text, startLine);
 
     } else if (firstKind == TOK_LPAREN || firstKind == TOK_NOT) {
-        // ( や ! で始まる → 条件/ループ
+        // ( や ! で始まる → 条件/ループ（; があれば for）
+        if (lineHasLoop() && lineSemicolonCount() >= 1)
+            return parseForLoop(startLine);
         return parseCondOrLoop(startLine);
 
     } else if (firstKind == TOK_NUMBER) {
+        if (lineHasLoop() && lineSemicolonCount() >= 1)
+            return parseForLoop(startLine);
         if (lineHasArrow() || lineHasLoop())
             return parseCondOrLoop(startLine);
         Expr* e = parseExpr();
@@ -236,6 +320,14 @@ Node* Parser::parseOneStmt() {
             std::string varName = peek().value;
             advance(); advance(); // ident, :
             return new InputNode(varName, startLine);
+
+        } else if (isCompoundAssignOp(nextKind)) {
+            // x += 式 など複合代入（単独文）
+            return parseLoopClause(startLine);
+
+        } else if (nextKind == TOK_ASSIGN && lineHasLoop() && lineSemicolonCount() >= 1) {
+            // init; cond; incr o { } の init が x=式 の場合
+            return parseForLoop(startLine);
 
         } else if (nextKind == TOK_ASSIGN && (lineHasArrow() || lineHasLoop())) {
             // x = 式 -> / x = 式 o → 条件/ループ
@@ -253,6 +345,9 @@ Node* Parser::parseOneStmt() {
                 Expr* e = parseExpr();
                 return new ExprAssignNode(varName, e, startLine);
             }
+
+        } else if (lineHasLoop() && lineSemicolonCount() >= 1) {
+            return parseForLoop(startLine);
 
         } else if (lineHasArrow() || lineHasLoop()) {
             // x op 式 -> / x op 式 o (比較・算術を含む条件式)

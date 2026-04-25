@@ -197,6 +197,34 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
         for (size_t i = 0; i < n->stmts.size(); i++)
             emitStmt(out, n->stmts[i], indent);
 
+    } else if (node->kind == NODE_COMPOUND_ASSIGN) {
+        CompoundAssignNode* n = static_cast<CompoundAssignNode*>(node);
+        std::string cexpr = genExpr(n->expr);
+        out << indent << n->varName << " " << n->op << "= " << cexpr << ";\n";
+
+    } else if (node->kind == NODE_FOR) {
+        ForNode* n = static_cast<ForNode*>(node);
+
+        // 変数の事前宣言
+        if (n->init) preDeclare(out, n->init, indent);
+        if (n->body->kind == NODE_BLOCK) {
+            BlockNode* blk = static_cast<BlockNode*>(n->body);
+            for (size_t i = 0; i < blk->stmts.size(); i++)
+                preDeclare(out, blk->stmts[i], indent);
+        } else {
+            preDeclare(out, n->body, indent);
+        }
+
+        // init を実行
+        if (n->init) emitStmt(out, n->init, indent);
+
+        // while (cond) { body; incr; }
+        std::string condStr = n->cond ? genBoolExpr(n->cond) : "1";
+        out << indent << "while (" << condStr << ") {\n";
+        emitStmt(out, n->body, indent + "    ");
+        if (n->incr) emitStmt(out, n->incr, indent + "    ");
+        out << indent << "}\n";
+
     } else if (node->kind == NODE_LOOP) {
         LoopNode* n = static_cast<LoopNode*>(node);
 

@@ -26,6 +26,8 @@ private:
     bool isCompOp(TokenKind k) const;
     bool lineHasArrow() const;
     bool lineHasLoop() const;
+    int  lineSemicolonCount() const;
+    bool isCompoundAssignOp(TokenKind k) const;
     Expr* parseLogicExpr();   // & |
     Expr* parseCompareExpr(); // 比較演算子
     Expr* parseExpr();        // + -
@@ -34,6 +36,8 @@ private:
     Expr* parseCondExpr();    // 条件全体（論理式）
     Node* parseOneStmt();
     Node* parseCondOrLoop(int line);
+    Node* parseForLoop(int line);
+    Node* parseLoopClause(int line); // init/incr用: 代入 or 複合代入
     Node* parseCondBody(int line);
     Node* parseBlock(int line);
 };
