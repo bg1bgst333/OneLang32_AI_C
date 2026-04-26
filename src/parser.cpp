@@ -90,6 +90,10 @@ Expr* Parser::parsePrimary() {
         }
         return e;
     }
+    if (peek().kind == TOK_STRING) {
+        std::string val = advance().value;
+        return new StringExpr(val);
+    }
     if (peek().kind == TOK_NUMBER) {
         const Token& t = advance();
         bool isFloat = t.value.find('.') != std::string::npos;
@@ -337,14 +341,8 @@ Node* Parser::parseOneStmt() {
             // x = ... → 代入
             std::string varName = peek().value;
             advance(); advance(); // ident, =
-            if (!atEnd() && peek().kind == TOK_STRING) {
-                std::string sval = peek().value;
-                advance();
-                return new AssignNode(varName, VAL_STRING, sval, startLine);
-            } else {
-                Expr* e = parseExpr();
-                return new ExprAssignNode(varName, e, startLine);
-            }
+            Expr* e = parseExpr();
+            return new ExprAssignNode(varName, e, startLine);
 
         } else if (lineHasLoop() && lineSemicolonCount() >= 1) {
             return parseForLoop(startLine);
