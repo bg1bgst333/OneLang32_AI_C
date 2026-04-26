@@ -28,18 +28,22 @@ private:
     bool lineHasLoop() const;
     int  lineSemicolonCount() const;
     bool isCompoundAssignOp(TokenKind k) const;
+    bool lineHasFuncDef() const;
     Expr* parseLogicExpr();   // & |
     Expr* parseCompareExpr(); // 比較演算子
     Expr* parseExpr();        // + -
     Expr* parseTerm();        // * /
     Expr* parsePrimary();     // 数値・変数・括弧・!
     Expr* parseCondExpr();    // 条件全体（論理式）
+    Expr* parseFuncCallExpr(const std::string& name); // 関数呼び出し式
     Node* parseOneStmt();
     Node* parseCondOrLoop(int line);
     Node* parseForLoop(int line);
     Node* parseLoopClause(int line); // init/incr用: 代入 or 複合代入
     Node* parseCondBody(int line);
     Node* parseBlock(int line);
+    Node* parseFuncDef(int line);
+    Node* parseFuncCallStmt(const std::string& name, int line);
 };
 
 } // namespace one

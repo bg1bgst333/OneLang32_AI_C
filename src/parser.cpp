@@ -67,6 +67,29 @@ bool Parser::isCompoundAssignOp(TokenKind k) const {
            k == TOK_STAR_ASSIGN || k == TOK_SLASH_ASSIGN;
 }
 
+// IDENT ( params ) { の形か判定（関数定義）
+bool Parser::lineHasFuncDef() const {
+    size_t i = pos_;
+    if (i >= tokens_.size() || tokens_[i].kind != TOK_IDENT) return false;
+    i++;
+    if (i >= tokens_.size() || tokens_[i].kind != TOK_LPAREN) return false;
+    i++;
+    int depth = 1;
+    while (i < tokens_.size() && depth > 0) {
+        if (tokens_[i].kind == TOK_NEWLINE || tokens_[i].kind == TOK_EOF) return false;
+        if (tokens_[i].kind == TOK_LPAREN) depth++;
+        if (tokens_[i].kind == TOK_RPAREN) depth--;
+        i++;
+    }
+    // ) の後に { があれば関数定義
+    while (i < tokens_.size() &&
+           tokens_[i].kind != TOK_NEWLINE && tokens_[i].kind != TOK_EOF) {
+        if (tokens_[i].kind == TOK_LBRACE) return true;
+        i++;
+    }
+    return false;
+}
+
 // ── 式パーサー ────────────────────────────────────────────
 
 // 基本要素: 数値・変数・(論理式)・!式
@@ -101,6 +124,8 @@ Expr* Parser::parsePrimary() {
     }
     if (peek().kind == TOK_IDENT) {
         std::string name = advance().value;
+        if (!atEnd() && peek().kind == TOK_LPAREN)
+            return parseFuncCallExpr(name);
         return new VarExpr(name);
     }
     std::ostringstream ss;
@@ -309,7 +334,14 @@ Node* Parser::parseOneStmt() {
     int startLine = peek().line;
     TokenKind firstKind = peek().kind;
 
-    if (firstKind == TOK_ASSIGN) {
+    if (firstKind == TOK_LARROW) {
+        // <- 式 → return
+        advance();
+        if (atEnd() || peek().kind == TOK_NEWLINE) return new ReturnNode(NULL, startLine);
+        Expr* e = parseExpr();
+        return new ReturnNode(e, startLine);
+
+    } else if (firstKind == TOK_ASSIGN) {
         // = 式 → 出力
         advance();
         Expr* e = parseExpr();
@@ -338,7 +370,16 @@ Node* Parser::parseOneStmt() {
     } else if (firstKind == TOK_IDENT) {
         TokenKind nextKind = peekAt(1).kind;
 
-        if (nextKind == TOK_COLON) {
+        if (nextKind == TOK_LPAREN && lineHasFuncDef()) {
+            // func(params) { body } → 関数定義
+            return parseFuncDef(startLine);
+
+        } else if (nextKind == TOK_LPAREN) {
+            // func(args) → 関数呼び出し文
+            std::string name = advance().value;
+            return parseFuncCallStmt(name, startLine);
+
+        } else if (nextKind == TOK_COLON) {
             // x: → 標準入力
             std::string varName = peek().value;
             advance(); advance(); // ident, :
@@ -378,6 +419,47 @@ Node* Parser::parseOneStmt() {
         }
     }
     return NULL;
+}
+
+// 関数呼び出し式: name( arg, arg, ... )
+Expr* Parser::parseFuncCallExpr(const std::string& name) {
+    advance(); // ( を消費
+    FuncCallExpr* call = new FuncCallExpr(name);
+    while (!atEnd() && peek().kind != TOK_RPAREN) {
+        if (peek().kind == TOK_NEWLINE || peek().kind == TOK_EOF) break;
+        call->args.push_back(parseExpr());
+        if (!atEnd() && peek().kind == TOK_COMMA) advance(); // , をスキップ
+    }
+    if (!atEnd() && peek().kind == TOK_RPAREN) advance(); // ) を消費
+    return call;
+}
+
+// 関数定義: name( params ) { body }
+Node* Parser::parseFuncDef(int line) {
+    std::string name = advance().value; // 関数名
+    advance(); // (
+    std::vector<std::string> params;
+    while (!atEnd() && peek().kind != TOK_RPAREN) {
+        if (peek().kind == TOK_IDENT) params.push_back(advance().value);
+        if (!atEnd() && peek().kind == TOK_COMMA) advance();
+    }
+    if (!atEnd() && peek().kind == TOK_RPAREN) advance(); // )
+    // { body }
+    Node* body = parseCondBody(line);
+    return new FuncDefNode(name, params, body, line);
+}
+
+// 関数呼び出し文: name( args )（戻り値不使用）
+Node* Parser::parseFuncCallStmt(const std::string& name, int line) {
+    advance(); // (
+    FuncCallStmtNode* node = new FuncCallStmtNode(name, line);
+    while (!atEnd() && peek().kind != TOK_RPAREN) {
+        if (peek().kind == TOK_NEWLINE || peek().kind == TOK_EOF) break;
+        node->args.push_back(parseExpr());
+        if (!atEnd() && peek().kind == TOK_COMMA) advance();
+    }
+    if (!atEnd() && peek().kind == TOK_RPAREN) advance(); // )
+    return node;
 }
 
 Program* Parser::parse() {

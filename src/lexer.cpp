@@ -5,7 +5,7 @@
 namespace one {
 
 Lexer::Lexer(const std::string& src)
-    : src_(src), pos_(0), line_(1) {}
+    : src_(src), pos_(0), line_(1), parenDepth_(0) {}
 
 bool Lexer::atEnd() const { return pos_ >= src_.size(); }
 char Lexer::peek() const { return src_[pos_]; }
@@ -105,8 +105,9 @@ Token Lexer::nextToken() {
     // クォート付き文字列
     if (c == '"') return readQuotedString();
 
-    // セミコロン
+    // セミコロン・カンマ
     if (c == ';') { advance(); return Token(TOK_SEMICOLON, ";", line_); }
+    if (c == ',') { advance(); return Token(TOK_COMMA,     ",", line_); }
 
     // 代入演算子 / コロン / 四則演算子（複合代入を先にチェック）
     if (c == '=') { advance(); return Token(TOK_ASSIGN, "=", line_); }
@@ -150,18 +151,19 @@ Token Lexer::nextToken() {
         return Token(TOK_GT, ">", line_);
     }
 
-    // < <=
+    // < <= <-
     if (c == '<') {
         advance();
-        if (!atEnd() && peek() == '=') { advance(); return Token(TOK_LTE, "<=", line_); }
+        if (!atEnd() && peek() == '=') { advance(); return Token(TOK_LTE,    "<=", line_); }
+        if (!atEnd() && peek() == '-') { advance(); return Token(TOK_LARROW,  "<-", line_); }
         return Token(TOK_LT, "<", line_);
     }
 
     // ブロック括弧・丸括弧
     if (c == '{') { advance(); return Token(TOK_LBRACE,  "{", line_); }
     if (c == '}') { advance(); return Token(TOK_RBRACE,  "}", line_); }
-    if (c == '(') { advance(); return Token(TOK_LPAREN,  "(", line_); }
-    if (c == ')') { advance(); return Token(TOK_RPAREN,  ")", line_); }
+    if (c == '(') { advance(); parenDepth_++; return Token(TOK_LPAREN,  "(", line_); }
+    if (c == ')') { advance(); if (parenDepth_ > 0) parenDepth_--; return Token(TOK_RPAREN,  ")", line_); }
 
     // 論理演算子
     if (c == '&') { advance(); return Token(TOK_AND, "&", line_); }
@@ -187,7 +189,7 @@ Token Lexer::nextToken() {
                            nc2 == '+' || nc2 == '-' || nc2 == '*' || nc2 == '/' ||
                            nc2 == '>' || nc2 == '<' || nc2 == '!' || nc2 == '=' ||
                            nc2 == ')' || nc2 == '&' || nc2 == '|' || nc2 == ';' ||
-                           nc2 == '#';
+                           nc2 == '#' || (nc2 == ',' && parenDepth_ > 0);
             if (!afterOk) {
                 pos_ = saved;
                 return readUnquotedLine();
@@ -215,8 +217,9 @@ Token Lexer::nextToken() {
                         nc == '=' || nc == ':' ||
                         nc == '+' || nc == '-' || nc == '*' || nc == '/' ||
                         nc == '>' || nc == '<' || nc == '!' ||
-                        nc == ')' || nc == '&' || nc == '|' || nc == ';' ||
-                        nc == '\n' || nc == '\r' || nc == '#';
+                        nc == '(' || nc == ')' || nc == '&' || nc == '|' || nc == ';' ||
+                        nc == '\n' || nc == '\r' || nc == '#' ||
+                        (nc == ',' && parenDepth_ > 0); // カンマは括弧内のみ区切り
         if (nextIsOk) return ident;
         // そうでなければ行全体をクォートなし文字列として読み直す
         pos_ = saved;

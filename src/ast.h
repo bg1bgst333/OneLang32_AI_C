@@ -18,7 +18,10 @@ enum NodeKind {
     NODE_LOOP,             // 条件 o { ループ }
     NODE_FOR,              // init; cond; incr o { ループ }
     NODE_COMPOUND_ASSIGN,  // x += 式
-    NODE_BLOCK             // { 複数文 }
+    NODE_BLOCK,            // { 複数文 }
+    NODE_FUNC_DEF,         // func(a,b) { 処理 }
+    NODE_RETURN,           // <- 式
+    NODE_FUNC_CALL_STMT    // func(args) 文として呼び出し
 };
 
 struct Node {
@@ -71,7 +74,7 @@ struct InputNode : public Node {
 
 // ── 式ノード ──────────────────────────────────────────────
 
-enum ExprKind { EXPR_NUMBER, EXPR_VAR, EXPR_BINARY, EXPR_COMPARE, EXPR_LOGIC, EXPR_NOT, EXPR_STRING };
+enum ExprKind { EXPR_NUMBER, EXPR_VAR, EXPR_BINARY, EXPR_COMPARE, EXPR_LOGIC, EXPR_NOT, EXPR_STRING, EXPR_FUNC_CALL };
 
 struct Expr {
     ExprKind kind;
@@ -202,6 +205,39 @@ struct BlockNode : public Node {
     ~BlockNode() {
         for (size_t i = 0; i < stmts.size(); i++) delete stmts[i];
     }
+};
+
+// 関数呼び出し式: func(args)
+struct FuncCallExpr : Expr {
+    std::string name;
+    std::vector<Expr*> args;
+    explicit FuncCallExpr(const std::string& n) : Expr(EXPR_FUNC_CALL), name(n) {}
+    ~FuncCallExpr() { for (size_t i = 0; i < args.size(); i++) delete args[i]; }
+};
+
+// 関数定義ノード: name(params) { body }
+struct FuncDefNode : public Node {
+    std::string name;
+    std::vector<std::string> params;
+    Node* body;
+    FuncDefNode(const std::string& n, const std::vector<std::string>& p, Node* b, int l)
+        : Node(NODE_FUNC_DEF, l), name(n), params(p), body(b) {}
+    ~FuncDefNode() { delete body; }
+};
+
+// return ノード: <- 式
+struct ReturnNode : public Node {
+    Expr* expr; // NULL = 値なし return
+    ReturnNode(Expr* e, int l) : Node(NODE_RETURN, l), expr(e) {}
+    ~ReturnNode() { delete expr; }
+};
+
+// 関数呼び出し文: func(args)（戻り値不使用）
+struct FuncCallStmtNode : public Node {
+    std::string name;
+    std::vector<Expr*> args;
+    FuncCallStmtNode(const std::string& n, int l) : Node(NODE_FUNC_CALL_STMT, l), name(n) {}
+    ~FuncCallStmtNode() { for (size_t i = 0; i < args.size(); i++) delete args[i]; }
 };
 
 // ─────────────────────────────────────────────────────────
