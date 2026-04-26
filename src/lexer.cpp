@@ -16,9 +16,14 @@ char Lexer::advance() {
 }
 
 // スペース・タブのみスキップ（改行はスキップしない）
+// # から行末まではコメントとして読み飛ばす
 void Lexer::skipSpaces() {
     while (!atEnd() && (peek() == ' ' || peek() == '\t'))
         advance();
+    if (!atEnd() && peek() == '#') {
+        while (!atEnd() && peek() != '\n' && peek() != '\r')
+            advance();
+    }
 }
 
 // "..." 形式（\nエスケープ等対応）
@@ -181,7 +186,8 @@ Token Lexer::nextToken() {
             bool afterOk = nc2 == ' ' || nc2 == '\t' || nc2 == '\n' || nc2 == '\r' ||
                            nc2 == '+' || nc2 == '-' || nc2 == '*' || nc2 == '/' ||
                            nc2 == '>' || nc2 == '<' || nc2 == '!' || nc2 == '=' ||
-                           nc2 == ')' || nc2 == '&' || nc2 == '|' || nc2 == ';';
+                           nc2 == ')' || nc2 == '&' || nc2 == '|' || nc2 == ';' ||
+                           nc2 == '#';
             if (!afterOk) {
                 pos_ = saved;
                 return readUnquotedLine();
@@ -210,7 +216,7 @@ Token Lexer::nextToken() {
                         nc == '+' || nc == '-' || nc == '*' || nc == '/' ||
                         nc == '>' || nc == '<' || nc == '!' ||
                         nc == ')' || nc == '&' || nc == '|' || nc == ';' ||
-                        nc == '\n' || nc == '\r';
+                        nc == '\n' || nc == '\r' || nc == '#';
         if (nextIsOk) return ident;
         // そうでなければ行全体をクォートなし文字列として読み直す
         pos_ = saved;
