@@ -54,6 +54,9 @@ std::string CodeGen::genBoolExpr(const Expr* e) {
 
 // 式をC言語の文字列として生成（未定義変数は0）
 std::string CodeGen::genExpr(const Expr* e) {
+    if (e->kind == EXPR_STRING) {
+        return "\"" + escapeString(static_cast<const StringExpr*>(e)->value) + "\"";
+    }
     if (e->kind == EXPR_NUMBER) {
         return static_cast<const NumberExpr*>(e)->raw;
     }
@@ -69,21 +72,96 @@ std::string CodeGen::genExpr(const Expr* e) {
     return "(" + genExpr(b->left) + " " + op + " " + genExpr(b->right) + ")";
 }
 
-// 式の型を推論（float成分があればVAL_FLOAT、なければVAL_INT）
+// 文字列式かどうかを判定
+bool CodeGen::isStringExpr(const Expr* e) {
+    if (e->kind == EXPR_STRING) return true;
+    if (e->kind == EXPR_VAR) {
+        const VarExpr* v = static_cast<const VarExpr*>(e);
+        return varTypes_.count(v->name) && varTypes_.at(v->name) == VAL_STRING;
+    }
+    if (e->kind == EXPR_BINARY) {
+        const BinaryExpr* b = static_cast<const BinaryExpr*>(e);
+        return b->op == '+' && (isStringExpr(b->left) || isStringExpr(b->right));
+    }
+    return false;
+}
+
+// 文字列式を再帰的にformat文字列と引数リストに分解
+void CodeGen::collectStrParts(const Expr* e, std::string& fmt, std::vector<std::string>& args) {
+    if (e->kind == EXPR_STRING) {
+        fmt += "%s";
+        args.push_back("\"" + escapeString(static_cast<const StringExpr*>(e)->value) + "\"");
+        return;
+    }
+    if (e->kind == EXPR_VAR) {
+        const VarExpr* v = static_cast<const VarExpr*>(e);
+        if (varTypes_.count(v->name) && varTypes_.at(v->name) == VAL_STRING) {
+            fmt += "%s";
+        } else {
+            ValKind vk = varTypes_.count(v->name) ? varTypes_.at(v->name) : VAL_INT;
+            fmt += (vk == VAL_FLOAT) ? "%g" : "%d";
+        }
+        args.push_back(v->name);
+        return;
+    }
+    if (e->kind == EXPR_NUMBER) {
+        const NumberExpr* n = static_cast<const NumberExpr*>(e);
+        fmt += n->isFloat ? "%g" : "%d";
+        args.push_back(n->raw);
+        return;
+    }
+    if (e->kind == EXPR_BINARY) {
+        const BinaryExpr* b = static_cast<const BinaryExpr*>(e);
+        collectStrParts(b->left, fmt, args);
+        collectStrParts(b->right, fmt, args);
+        return;
+    }
+}
+
+// 文字列連結式のコードを生成してバッファ変数名を返す
+std::string CodeGen::genStrExpr(std::ostringstream& out, const Expr* e, const std::string& indent) {
+    std::ostringstream idxss;
+    idxss << strTmpCount_++;
+    std::string bufName = "_one_str_" + idxss.str();
+    // 単純な文字列リテラル
+    if (e->kind == EXPR_STRING) {
+        out << indent << "const char* " << bufName << " = \""
+            << escapeString(static_cast<const StringExpr*>(e)->value) << "\";\n";
+        return bufName;
+    }
+    // 文字列変数はそのまま（カウンタを消費しないよう戻す）
+    if (e->kind == EXPR_VAR) {
+        strTmpCount_--;
+        return static_cast<const VarExpr*>(e)->name;
+    }
+    // 連結式: snprintfで結合
+    std::string fmt;
+    std::vector<std::string> args;
+    collectStrParts(e, fmt, args);
+    out << indent << "char " << bufName << "[4096];\n";
+    out << indent << "snprintf(" << bufName << ", sizeof(" << bufName << "), \"" << fmt << "\"";
+    for (size_t i = 0; i < args.size(); i++)
+        out << ", " << args[i];
+    out << ");\n";
+    return bufName;
+}
+
+// 式の型を推論
 ValKind CodeGen::exprType(const Expr* e) {
+    if (e->kind == EXPR_STRING) return VAL_STRING;
     if (e->kind == EXPR_NUMBER) {
         return static_cast<const NumberExpr*>(e)->isFloat ? VAL_FLOAT : VAL_INT;
     }
     if (e->kind == EXPR_VAR) {
         const VarExpr* v = static_cast<const VarExpr*>(e);
         if (!varTypes_.count(v->name)) return VAL_INT; // 未定義 → int(0)
-        ValKind vk = varTypes_[v->name];
-        return (vk == VAL_STRING) ? VAL_INT : vk;
+        return varTypes_[v->name];
     }
-    // EXPR_BINARY
+    // EXPR_BINARY: 片方でも文字列なら文字列
     const BinaryExpr* b = static_cast<const BinaryExpr*>(e);
     ValKind lt = exprType(b->left);
     ValKind rt = exprType(b->right);
+    if (lt == VAL_STRING || rt == VAL_STRING) return VAL_STRING;
     return (lt == VAL_FLOAT || rt == VAL_FLOAT) ? VAL_FLOAT : VAL_INT;
 }
 
@@ -93,8 +171,9 @@ void CodeGen::preDeclare(std::ostringstream& out, Node* node, const std::string&
         ExprAssignNode* b = static_cast<ExprAssignNode*>(node);
         if (varTypes_.count(b->varName) == 0) {
             ValKind vk = exprType(b->expr);
-            if (vk == VAL_INT) out << indent << "int " << b->varName << " = 0;\n";
-            else               out << indent << "double " << b->varName << " = 0.0;\n";
+            if (vk == VAL_INT)        out << indent << "int " << b->varName << " = 0;\n";
+            else if (vk == VAL_FLOAT) out << indent << "double " << b->varName << " = 0.0;\n";
+            else                      out << indent << "const char* " << b->varName << " = \"\";\n";
             varTypes_[b->varName] = vk;
         }
     } else if (node->kind == NODE_ASSIGN) {
@@ -165,12 +244,10 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
 
     } else if (node->kind == NODE_EXPR_OUTPUT) {
         ExprOutputNode* n = static_cast<ExprOutputNode*>(node);
-        if (n->expr->kind == EXPR_VAR) {
-            const VarExpr* v = static_cast<const VarExpr*>(n->expr);
-            if (varTypes_.count(v->name) && varTypes_[v->name] == VAL_STRING) {
-                out << indent << "puts(" << v->name << ");\n";
-                return;
-            }
+        if (isStringExpr(n->expr)) {
+            std::string buf = genStrExpr(out, n->expr, indent);
+            out << indent << "puts(" << buf << ");\n";
+            return;
         }
         ValKind vk = exprType(n->expr);
         std::string cexpr = genExpr(n->expr);
@@ -182,14 +259,20 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
     } else if (node->kind == NODE_EXPR_ASSIGN) {
         ExprAssignNode* n = static_cast<ExprAssignNode*>(node);
         ValKind vk = exprType(n->expr);
-        std::string cexpr = genExpr(n->expr);
         bool declared = varTypes_.count(n->varName) > 0;
-        if (vk == VAL_INT) {
-            out << indent << (declared ? "" : "int ") << n->varName << " = " << cexpr << ";\n";
-            varTypes_[n->varName] = VAL_INT;
+        if (vk == VAL_STRING) {
+            std::string buf = genStrExpr(out, n->expr, indent);
+            out << indent << (declared ? "" : "const char* ") << n->varName << " = " << buf << ";\n";
+            varTypes_[n->varName] = VAL_STRING;
         } else {
-            out << indent << (declared ? "" : "double ") << n->varName << " = " << cexpr << ";\n";
-            varTypes_[n->varName] = VAL_FLOAT;
+            std::string cexpr = genExpr(n->expr);
+            if (vk == VAL_INT) {
+                out << indent << (declared ? "" : "int ") << n->varName << " = " << cexpr << ";\n";
+                varTypes_[n->varName] = VAL_INT;
+            } else {
+                out << indent << (declared ? "" : "double ") << n->varName << " = " << cexpr << ";\n";
+                varTypes_[n->varName] = VAL_FLOAT;
+            }
         }
 
     } else if (node->kind == NODE_BLOCK) {
@@ -261,6 +344,7 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
 
 std::string CodeGen::generate(const Program& prog) {
     varTypes_.clear();
+    strTmpCount_ = 0;
     std::ostringstream out;
 
     out << "#include <stdio.h>\n";

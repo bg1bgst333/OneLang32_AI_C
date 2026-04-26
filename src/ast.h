@@ -71,12 +71,18 @@ struct InputNode : public Node {
 
 // ── 式ノード ──────────────────────────────────────────────
 
-enum ExprKind { EXPR_NUMBER, EXPR_VAR, EXPR_BINARY, EXPR_COMPARE, EXPR_LOGIC, EXPR_NOT };
+enum ExprKind { EXPR_NUMBER, EXPR_VAR, EXPR_BINARY, EXPR_COMPARE, EXPR_LOGIC, EXPR_NOT, EXPR_STRING };
 
 struct Expr {
     ExprKind kind;
     explicit Expr(ExprKind k) : kind(k) {}
     virtual ~Expr() {}
+};
+
+// 文字列リテラル式
+struct StringExpr : Expr {
+    std::string value;
+    explicit StringExpr(const std::string& v) : Expr(EXPR_STRING), value(v) {}
 };
 
 // 数値リテラル式
