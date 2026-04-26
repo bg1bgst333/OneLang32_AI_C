@@ -155,13 +155,14 @@ struct NotExpr : Expr {
     ~NotExpr() { delete operand; }
 };
 
-// 条件実行ノード: 条件式 -> 実行内容
+// 条件実行ノード: 条件式 -> 実行内容 (-> else本体)
 struct CondNode : public Node {
     Expr* cond;
     Node* body;
-    CondNode(Expr* c, Node* b, int line)
-        : Node(NODE_COND, line), cond(c), body(b) {}
-    ~CondNode() { delete cond; delete body; }
+    Node* elseBody; // NULL if no else
+    CondNode(Expr* c, Node* b, Node* e, int line)
+        : Node(NODE_COND, line), cond(c), body(b), elseBody(e) {}
+    ~CondNode() { delete cond; delete body; delete elseBody; }
 };
 
 // ループノード: 条件式 o { 処理 }

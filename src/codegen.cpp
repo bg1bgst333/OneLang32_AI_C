@@ -336,8 +336,23 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
             preDeclare(out, n->body, indent);
         }
 
+        // else本体で未宣言変数に代入する場合も事前宣言
+        if (n->elseBody) {
+            if (n->elseBody->kind == NODE_BLOCK) {
+                BlockNode* blk = static_cast<BlockNode*>(n->elseBody);
+                for (size_t i = 0; i < blk->stmts.size(); i++)
+                    preDeclare(out, blk->stmts[i], indent);
+            } else {
+                preDeclare(out, n->elseBody, indent);
+            }
+        }
+
         out << indent << "if (" << genBoolExpr(n->cond) << ") {\n";
         emitStmt(out, n->body, indent + "    ");
+        if (n->elseBody) {
+            out << indent << "} else {\n";
+            emitStmt(out, n->elseBody, indent + "    ");
+        }
         out << indent << "}\n";
     }
 }

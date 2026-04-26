@@ -274,7 +274,26 @@ Node* Parser::parseCondOrLoop(int line) {
     if (!atEnd() && peek().kind == TOK_ARROW) {
         advance(); // -> を消費
         Node* body = parseCondBody(line);
-        return new CondNode(cond, body, line);
+
+        // else チェック: } -> {...} (同行) または次行の行頭 ->
+        Node* elseBody = NULL;
+        if (!atEnd() && peek().kind == TOK_ARROW) {
+            // ブロック後の同行 } ->
+            advance();
+            elseBody = parseCondBody(line);
+        } else {
+            // 次行の行頭 -> チェック（改行をまたぐ）
+            size_t savedPos = pos_;
+            while (!atEnd() && peek().kind == TOK_NEWLINE) advance();
+            if (!atEnd() && peek().kind == TOK_ARROW) {
+                advance();
+                elseBody = parseCondBody(line);
+            } else {
+                pos_ = savedPos; // else なし → 巻き戻し
+            }
+        }
+
+        return new CondNode(cond, body, elseBody, line);
     } else if (!atEnd() && peek().kind == TOK_LOOP) {
         advance(); // o を消費
         Node* body = parseCondBody(line);
