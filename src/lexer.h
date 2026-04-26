@@ -35,6 +35,8 @@ enum TokenKind {
     TOK_MINUS_ASSIGN, // -=
     TOK_STAR_ASSIGN,  // *=
     TOK_SLASH_ASSIGN, // /=
+    TOK_LARROW,   // <- (return)
+    TOK_COMMA,    // ,
     TOK_NEWLINE,  // 改行 (文のセパレータ)
     TOK_EOF
 };
@@ -56,6 +58,7 @@ private:
     std::string src_;
     size_t pos_;
     int line_;
+    int parenDepth_; // 括弧の深さ（>0 のとき , を区切りとして扱う）
 
     bool atEnd() const;
     char peek() const;

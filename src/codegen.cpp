@@ -54,6 +54,15 @@ std::string CodeGen::genBoolExpr(const Expr* e) {
 
 // 式をC言語の文字列として生成（未定義変数は0）
 std::string CodeGen::genExpr(const Expr* e) {
+    if (e->kind == EXPR_FUNC_CALL) {
+        const FuncCallExpr* f = static_cast<const FuncCallExpr*>(e);
+        std::string call = f->name + "(";
+        for (size_t i = 0; i < f->args.size(); i++) {
+            if (i > 0) call += ", ";
+            call += genExpr(f->args[i]);
+        }
+        return call + ")";
+    }
     if (e->kind == EXPR_STRING) {
         return "\"" + escapeString(static_cast<const StringExpr*>(e)->value) + "\"";
     }
@@ -148,6 +157,11 @@ std::string CodeGen::genStrExpr(std::ostringstream& out, const Expr* e, const st
 
 // 式の型を推論
 ValKind CodeGen::exprType(const Expr* e) {
+    if (e->kind == EXPR_FUNC_CALL) {
+        const FuncCallExpr* f = static_cast<const FuncCallExpr*>(e);
+        if (funcRetTypes_.count(f->name)) return funcRetTypes_.at(f->name);
+        return VAL_FLOAT; // 未知の関数はdouble扱い
+    }
     if (e->kind == EXPR_STRING) return VAL_STRING;
     if (e->kind == EXPR_NUMBER) {
         return static_cast<const NumberExpr*>(e)->isFloat ? VAL_FLOAT : VAL_INT;
@@ -354,23 +368,105 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
             emitStmt(out, n->elseBody, indent + "    ");
         }
         out << indent << "}\n";
+
+    } else if (node->kind == NODE_RETURN) {
+        ReturnNode* n = static_cast<ReturnNode*>(node);
+        if (!n->expr) {
+            out << indent << "return;\n";
+        } else if (isStringExpr(n->expr)) {
+            std::string buf = genStrExpr(out, n->expr, indent);
+            out << indent << "return " << buf << ";\n";
+        } else {
+            out << indent << "return " << genExpr(n->expr) << ";\n";
+        }
+
+    } else if (node->kind == NODE_FUNC_CALL_STMT) {
+        FuncCallStmtNode* n = static_cast<FuncCallStmtNode*>(node);
+        out << indent << n->name << "(";
+        for (size_t i = 0; i < n->args.size(); i++) {
+            if (i > 0) out << ", ";
+            out << genExpr(n->args[i]);
+        }
+        out << ");\n";
     }
+}
+
+// 関数本体から戻り値型を推論
+ValKind CodeGen::inferReturnType(Node* body) {
+    if (!body) return VAL_INT;
+    if (body->kind == NODE_RETURN) {
+        ReturnNode* r = static_cast<ReturnNode*>(body);
+        return r->expr ? exprType(r->expr) : VAL_INT;
+    }
+    if (body->kind == NODE_BLOCK) {
+        BlockNode* blk = static_cast<BlockNode*>(body);
+        for (size_t i = 0; i < blk->stmts.size(); i++) {
+            if (blk->stmts[i]->kind == NODE_RETURN)
+                return inferReturnType(blk->stmts[i]);
+        }
+    }
+    if (body->kind == NODE_COND) {
+        CondNode* c = static_cast<CondNode*>(body);
+        ValKind vk = inferReturnType(c->body);
+        if (vk != VAL_INT) return vk;
+        if (c->elseBody) return inferReturnType(c->elseBody);
+    }
+    return VAL_INT;
+}
+
+// 関数定義を emit
+void CodeGen::emitFuncDef(std::ostringstream& out, FuncDefNode* n) {
+    // 引数をすべて double として登録し型推論
+    std::map<std::string, ValKind> savedTypes = varTypes_;
+    for (size_t i = 0; i < n->params.size(); i++)
+        varTypes_[n->params[i]] = VAL_FLOAT;
+
+    ValKind retType = inferReturnType(n->body);
+    funcRetTypes_[n->name] = retType;
+
+    // 戻り値型
+    if (retType == VAL_STRING)     out << "const char* ";
+    else if (retType == VAL_FLOAT) out << "double ";
+    else                           out << "int ";
+
+    // 関数名と引数
+    out << n->name << "(";
+    for (size_t i = 0; i < n->params.size(); i++) {
+        if (i > 0) out << ", ";
+        out << "double " << n->params[i];
+    }
+    out << ") {\n";
+
+    emitStmt(out, n->body, "    ");
+    out << "}\n\n";
+
+    varTypes_ = savedTypes;
 }
 
 std::string CodeGen::generate(const Program& prog) {
     varTypes_.clear();
+    funcRetTypes_.clear();
     strTmpCount_ = 0;
     std::ostringstream out;
 
     out << "#include <stdio.h>\n";
     out << "#include <string.h>\n";
-    out << "#include <windows.h>\n\n";
+    out << "#include <windows.h>\n";
+    out << "#undef min\n#undef max\n\n";
+
+    // 第1パス: 関数定義を先に emit
+    for (size_t i = 0; i < prog.stmts.size(); i++) {
+        if (prog.stmts[i]->kind == NODE_FUNC_DEF)
+            emitFuncDef(out, static_cast<FuncDefNode*>(prog.stmts[i]));
+    }
+
+    // 第2パス: main に非関数文を emit
     out << "int main(void) {\n";
     out << "    SetConsoleOutputCP(65001);\n";
-
-    for (size_t i = 0; i < prog.stmts.size(); i++)
-        emitStmt(out, prog.stmts[i], "    ");
-
+    for (size_t i = 0; i < prog.stmts.size(); i++) {
+        if (prog.stmts[i]->kind != NODE_FUNC_DEF)
+            emitStmt(out, prog.stmts[i], "    ");
+    }
     out << "    return 0;\n";
     out << "}\n";
     return out.str();
