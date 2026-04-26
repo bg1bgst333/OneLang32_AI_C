@@ -44,6 +44,8 @@ private:
     Node* parseBlock(int line);
     Node* parseFuncDef(int line);
     Node* parseFuncCallStmt(const std::string& name, int line);
+    Expr* parseListLiteral();
+    Expr* parsePostfix(Expr* base, const std::string& baseName);
 };
 
 } // namespace one

@@ -37,6 +37,9 @@ enum TokenKind {
     TOK_SLASH_ASSIGN, // /=
     TOK_LARROW,   // <- (return)
     TOK_COMMA,    // ,
+    TOK_DOT,      // .
+    TOK_LBRACKET, // [
+    TOK_RBRACKET, // ]
     TOK_NEWLINE,  // 改行 (文のセパレータ)
     TOK_EOF
 };

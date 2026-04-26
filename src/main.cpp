@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
     }
 
     // g++ で .exe にコンパイル
-    std::string cmd = "g++ \"" + cppPath + "\" -o \"" + exePath + "\"";
+    std::string cmd = "g++ -std=c++11 \"" + cppPath + "\" -o \"" + exePath + "\"";
     int ret = system(cmd.c_str());
 
     // 中間 .cpp を削除
