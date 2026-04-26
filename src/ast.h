@@ -21,7 +21,9 @@ enum NodeKind {
     NODE_BLOCK,            // { 複数文 }
     NODE_FUNC_DEF,         // func(a,b) { 処理 }
     NODE_RETURN,           // <- 式
-    NODE_FUNC_CALL_STMT    // func(args) 文として呼び出し
+    NODE_FUNC_CALL_STMT,   // func(args) 文として呼び出し
+    NODE_INDEX_ASSIGN,     // a[i] = 式
+    NODE_METHOD_CALL_STMT  // a.add(x) 文として呼び出し
 };
 
 struct Node {
@@ -47,7 +49,7 @@ struct NumberOutputNode : public Node {
 };
 
 // 変数の値の種類
-enum ValKind { VAL_INT, VAL_FLOAT, VAL_STRING };
+enum ValKind { VAL_INT, VAL_FLOAT, VAL_STRING, VAL_LIST };
 
 // 代入ノード: x = 値
 struct AssignNode : public Node {
@@ -74,7 +76,8 @@ struct InputNode : public Node {
 
 // ── 式ノード ──────────────────────────────────────────────
 
-enum ExprKind { EXPR_NUMBER, EXPR_VAR, EXPR_BINARY, EXPR_COMPARE, EXPR_LOGIC, EXPR_NOT, EXPR_STRING, EXPR_FUNC_CALL };
+enum ExprKind { EXPR_NUMBER, EXPR_VAR, EXPR_BINARY, EXPR_COMPARE, EXPR_LOGIC, EXPR_NOT, EXPR_STRING, EXPR_FUNC_CALL,
+                EXPR_LIST, EXPR_INDEX, EXPR_MEMBER, EXPR_METHOD_CALL };
 
 struct Expr {
     ExprKind kind;
@@ -205,6 +208,59 @@ struct BlockNode : public Node {
     ~BlockNode() {
         for (size_t i = 0; i < stmts.size(); i++) delete stmts[i];
     }
+};
+
+// リストリテラル式: [1, 2, 3]
+struct ListExpr : Expr {
+    std::vector<Expr*> elems;
+    ListExpr() : Expr(EXPR_LIST) {}
+    ~ListExpr() { for (size_t i = 0; i < elems.size(); i++) delete elems[i]; }
+};
+
+// インデックスアクセス式: a[i]
+struct IndexExpr : Expr {
+    std::string name;
+    Expr* index;
+    IndexExpr(const std::string& n, Expr* i) : Expr(EXPR_INDEX), name(n), index(i) {}
+    ~IndexExpr() { delete index; }
+};
+
+// メンバーアクセス式: a.len
+struct MemberExpr : Expr {
+    std::string name;   // オブジェクト変数名
+    std::string member; // メンバー名
+    MemberExpr(const std::string& n, const std::string& m)
+        : Expr(EXPR_MEMBER), name(n), member(m) {}
+};
+
+// メソッド呼び出し式: a.add(x) ※戻り値ありの場合
+struct MethodCallExpr : Expr {
+    std::string name;   // オブジェクト変数名
+    std::string method; // メソッド名
+    std::vector<Expr*> args;
+    MethodCallExpr(const std::string& n, const std::string& m)
+        : Expr(EXPR_METHOD_CALL), name(n), method(m) {}
+    ~MethodCallExpr() { for (size_t i = 0; i < args.size(); i++) delete args[i]; }
+};
+
+// インデックス代入ノード: a[i] = 式
+struct IndexAssignNode : public Node {
+    std::string name;
+    Expr* index;
+    Expr* value;
+    IndexAssignNode(const std::string& n, Expr* i, Expr* v, int l)
+        : Node(NODE_INDEX_ASSIGN, l), name(n), index(i), value(v) {}
+    ~IndexAssignNode() { delete index; delete value; }
+};
+
+// メソッド呼び出し文: a.add(x)（void）
+struct MethodCallStmtNode : public Node {
+    std::string name;
+    std::string method;
+    std::vector<Expr*> args;
+    MethodCallStmtNode(const std::string& n, const std::string& m, int l)
+        : Node(NODE_METHOD_CALL_STMT, l), name(n), method(m) {}
+    ~MethodCallStmtNode() { for (size_t i = 0; i < args.size(); i++) delete args[i]; }
 };
 
 // 関数呼び出し式: func(args)

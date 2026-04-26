@@ -105,9 +105,12 @@ Token Lexer::nextToken() {
     // クォート付き文字列
     if (c == '"') return readQuotedString();
 
-    // セミコロン・カンマ
-    if (c == ';') { advance(); return Token(TOK_SEMICOLON, ";", line_); }
-    if (c == ',') { advance(); return Token(TOK_COMMA,     ",", line_); }
+    // セミコロン・カンマ・ドット・ブラケット
+    if (c == ';') { advance(); return Token(TOK_SEMICOLON, ";",  line_); }
+    if (c == ',') { advance(); return Token(TOK_COMMA,     ",",  line_); }
+    if (c == '.') { advance(); return Token(TOK_DOT,       ".",  line_); }
+    if (c == '[') { advance(); parenDepth_++; return Token(TOK_LBRACKET, "[", line_); }
+    if (c == ']') { advance(); if (parenDepth_ > 0) parenDepth_--; return Token(TOK_RBRACKET, "]", line_); }
 
     // 代入演算子 / コロン / 四則演算子（複合代入を先にチェック）
     if (c == '=') { advance(); return Token(TOK_ASSIGN, "=", line_); }
@@ -189,6 +192,7 @@ Token Lexer::nextToken() {
                            nc2 == '+' || nc2 == '-' || nc2 == '*' || nc2 == '/' ||
                            nc2 == '>' || nc2 == '<' || nc2 == '!' || nc2 == '=' ||
                            nc2 == ')' || nc2 == '&' || nc2 == '|' || nc2 == ';' ||
+                           nc2 == '.' || nc2 == '[' || nc2 == ']' ||
                            nc2 == '#' || (nc2 == ',' && parenDepth_ > 0);
             if (!afterOk) {
                 pos_ = saved;
@@ -218,8 +222,9 @@ Token Lexer::nextToken() {
                         nc == '+' || nc == '-' || nc == '*' || nc == '/' ||
                         nc == '>' || nc == '<' || nc == '!' ||
                         nc == '(' || nc == ')' || nc == '&' || nc == '|' || nc == ';' ||
+                        nc == '.' || nc == '[' || nc == ']' ||
                         nc == '\n' || nc == '\r' || nc == '#' ||
-                        (nc == ',' && parenDepth_ > 0); // カンマは括弧内のみ区切り
+                        (nc == ',' && parenDepth_ > 0);
         if (nextIsOk) return ident;
         // そうでなければ行全体をクォートなし文字列として読み直す
         pos_ = saved;

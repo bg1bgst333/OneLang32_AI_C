@@ -113,6 +113,10 @@ Expr* Parser::parsePrimary() {
         }
         return e;
     }
+    // リストリテラル: [1, 2, 3]
+    if (peek().kind == TOK_LBRACKET) {
+        return parseListLiteral();
+    }
     if (peek().kind == TOK_STRING) {
         std::string val = advance().value;
         return new StringExpr(val);
@@ -124,9 +128,13 @@ Expr* Parser::parsePrimary() {
     }
     if (peek().kind == TOK_IDENT) {
         std::string name = advance().value;
+        Expr* base = NULL;
         if (!atEnd() && peek().kind == TOK_LPAREN)
-            return parseFuncCallExpr(name);
-        return new VarExpr(name);
+            base = parseFuncCallExpr(name);
+        else
+            base = new VarExpr(name);
+        // ポストフィックス: a[i] / a.len / a.add(x)
+        return parsePostfix(base, name);
     }
     std::ostringstream ss;
     ss << "line " << peek().line << ": unexpected token '" << peek().value << "' in expression";
@@ -379,6 +387,42 @@ Node* Parser::parseOneStmt() {
             std::string name = advance().value;
             return parseFuncCallStmt(name, startLine);
 
+        } else if (nextKind == TOK_LBRACKET) {
+            // a[i] = 式 → インデックス代入
+            std::string name = advance().value;
+            advance(); // [
+            Expr* idx = parseExpr();
+            if (!atEnd() && peek().kind == TOK_RBRACKET) advance(); // ]
+            if (!atEnd() && peek().kind == TOK_ASSIGN) {
+                advance(); // =
+                Expr* val = parseExpr();
+                return new IndexAssignNode(name, idx, val, startLine);
+            }
+            // 代入でなければ式出力
+            Expr* e = new IndexExpr(name, idx);
+            if (!atEnd() && peek().kind == TOK_ASSIGN) advance();
+            return new ExprOutputNode(e, startLine);
+
+        } else if (nextKind == TOK_DOT) {
+            // a.method(args) → メソッド呼び出し文 / a.member → 出力
+            std::string name = advance().value;
+            advance(); // .
+            std::string member = advance().value; // メンバー/メソッド名
+            if (!atEnd() && peek().kind == TOK_LPAREN) {
+                // a.method(args) 文
+                advance(); // (
+                MethodCallStmtNode* node = new MethodCallStmtNode(name, member, startLine);
+                while (!atEnd() && peek().kind != TOK_RPAREN) {
+                    if (peek().kind == TOK_NEWLINE || peek().kind == TOK_EOF) break;
+                    node->args.push_back(parseExpr());
+                    if (!atEnd() && peek().kind == TOK_COMMA) advance();
+                }
+                if (!atEnd() && peek().kind == TOK_RPAREN) advance(); // )
+                return node;
+            }
+            // a.member → 出力
+            return new ExprOutputNode(new MemberExpr(name, member), startLine);
+
         } else if (nextKind == TOK_COLON) {
             // x: → 標準入力
             std::string varName = peek().value;
@@ -419,6 +463,58 @@ Node* Parser::parseOneStmt() {
         }
     }
     return NULL;
+}
+
+// リストリテラル: [elem, elem, ...]
+Expr* Parser::parseListLiteral() {
+    advance(); // [ を消費
+    ListExpr* list = new ListExpr();
+    while (!atEnd() && peek().kind != TOK_RBRACKET) {
+        if (peek().kind == TOK_NEWLINE || peek().kind == TOK_EOF) break;
+        list->elems.push_back(parseExpr());
+        if (!atEnd() && peek().kind == TOK_COMMA) advance();
+    }
+    if (!atEnd() && peek().kind == TOK_RBRACKET) advance(); // ] を消費
+    return list;
+}
+
+// ポストフィックス: a[i] / a.len / a.add(x) / func()[i] など
+Expr* Parser::parsePostfix(Expr* base, const std::string& baseName) {
+    while (!atEnd()) {
+        if (peek().kind == TOK_LBRACKET) {
+            // a[i]
+            advance(); // [
+            Expr* idx = parseExpr();
+            if (!atEnd() && peek().kind == TOK_RBRACKET) advance(); // ]
+            delete base;
+            base = new IndexExpr(baseName, idx);
+        } else if (peek().kind == TOK_DOT) {
+            // a.member / a.method(args)
+            advance(); // .
+            if (atEnd() || peek().kind != TOK_IDENT) break;
+            std::string member = advance().value;
+            if (!atEnd() && peek().kind == TOK_LPAREN) {
+                // a.method(args)
+                advance(); // (
+                MethodCallExpr* mc = new MethodCallExpr(baseName, member);
+                while (!atEnd() && peek().kind != TOK_RPAREN) {
+                    if (peek().kind == TOK_NEWLINE || peek().kind == TOK_EOF) break;
+                    mc->args.push_back(parseExpr());
+                    if (!atEnd() && peek().kind == TOK_COMMA) advance();
+                }
+                if (!atEnd() && peek().kind == TOK_RPAREN) advance(); // )
+                delete base;
+                base = mc;
+            } else {
+                // a.member (プロパティ)
+                delete base;
+                base = new MemberExpr(baseName, member);
+            }
+        } else {
+            break;
+        }
+    }
+    return base;
 }
 
 // 関数呼び出し式: name( arg, arg, ... )

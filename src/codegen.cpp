@@ -54,6 +54,23 @@ std::string CodeGen::genBoolExpr(const Expr* e) {
 
 // 式をC言語の文字列として生成（未定義変数は0）
 std::string CodeGen::genExpr(const Expr* e) {
+    if (e->kind == EXPR_LIST) {
+        // リストリテラルはgenExprでは生成できない（宣言文が必要）→ 0を返す
+        return "0";
+    }
+    if (e->kind == EXPR_INDEX) {
+        const IndexExpr* ix = static_cast<const IndexExpr*>(e);
+        return ix->name + "[(int)(" + genExpr(ix->index) + ")]";
+    }
+    if (e->kind == EXPR_MEMBER) {
+        const MemberExpr* me = static_cast<const MemberExpr*>(e);
+        if (me->member == "len") return "(int)" + me->name + ".size()";
+        return "0";
+    }
+    if (e->kind == EXPR_METHOD_CALL) {
+        // メソッド呼び出し式（戻り値あり想定）→ 現状 void のみなので 0
+        return "0";
+    }
     if (e->kind == EXPR_FUNC_CALL) {
         const FuncCallExpr* f = static_cast<const FuncCallExpr*>(e);
         std::string call = f->name + "(";
@@ -157,6 +174,10 @@ std::string CodeGen::genStrExpr(std::ostringstream& out, const Expr* e, const st
 
 // 式の型を推論
 ValKind CodeGen::exprType(const Expr* e) {
+    if (e->kind == EXPR_LIST)        return VAL_LIST;
+    if (e->kind == EXPR_INDEX)       return VAL_FLOAT; // リスト要素はdouble
+    if (e->kind == EXPR_MEMBER)      return VAL_INT;   // .len はint
+    if (e->kind == EXPR_METHOD_CALL) return VAL_INT;
     if (e->kind == EXPR_FUNC_CALL) {
         const FuncCallExpr* f = static_cast<const FuncCallExpr*>(e);
         if (funcRetTypes_.count(f->name)) return funcRetTypes_.at(f->name);
@@ -263,6 +284,11 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
             out << indent << "puts(" << buf << ");\n";
             return;
         }
+        if (n->expr->kind == EXPR_MEMBER) {
+            // a.len など整数プロパティ
+            out << indent << "printf(\"%d\\n\", " << genExpr(n->expr) << ");\n";
+            return;
+        }
         ValKind vk = exprType(n->expr);
         std::string cexpr = genExpr(n->expr);
         if (vk == VAL_INT)
@@ -274,7 +300,20 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
         ExprAssignNode* n = static_cast<ExprAssignNode*>(node);
         ValKind vk = exprType(n->expr);
         bool declared = varTypes_.count(n->varName) > 0;
-        if (vk == VAL_STRING) {
+        if (vk == VAL_LIST) {
+            // リストリテラル代入: std::vector<double> a = {elems};
+            const ListExpr* le = static_cast<const ListExpr*>(n->expr);
+            if (!declared)
+                out << indent << "std::vector<double> " << n->varName << " = {";
+            else
+                out << indent << n->varName << " = {";
+            for (size_t i = 0; i < le->elems.size(); i++) {
+                if (i > 0) out << ", ";
+                out << genExpr(le->elems[i]);
+            }
+            out << "};\n";
+            varTypes_[n->varName] = VAL_LIST;
+        } else if (vk == VAL_STRING) {
             std::string buf = genStrExpr(out, n->expr, indent);
             out << indent << (declared ? "" : "const char* ") << n->varName << " = " << buf << ";\n";
             varTypes_[n->varName] = VAL_STRING;
@@ -388,6 +427,23 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
             out << genExpr(n->args[i]);
         }
         out << ");\n";
+
+    } else if (node->kind == NODE_INDEX_ASSIGN) {
+        IndexAssignNode* n = static_cast<IndexAssignNode*>(node);
+        out << indent << n->name << "[(int)(" << genExpr(n->index) << ")] = "
+            << genExpr(n->value) << ";\n";
+
+    } else if (node->kind == NODE_METHOD_CALL_STMT) {
+        MethodCallStmtNode* n = static_cast<MethodCallStmtNode*>(node);
+        if (n->method == "add") {
+            // a.add(x) → a.push_back(x)
+            out << indent << n->name << ".push_back(";
+            for (size_t i = 0; i < n->args.size(); i++) {
+                if (i > 0) out << ", ";
+                out << genExpr(n->args[i]);
+            }
+            out << ");\n";
+        }
     }
 }
 
@@ -451,6 +507,7 @@ std::string CodeGen::generate(const Program& prog) {
 
     out << "#include <stdio.h>\n";
     out << "#include <string.h>\n";
+    out << "#include <vector>\n";
     out << "#include <windows.h>\n";
     out << "#undef min\n#undef max\n\n";
 
