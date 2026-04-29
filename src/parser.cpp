@@ -67,6 +67,38 @@ bool Parser::isCompoundAssignOp(TokenKind k) const {
            k == TOK_STAR_ASSIGN || k == TOK_SLASH_ASSIGN;
 }
 
+bool Parser::lineHasFilename() const {
+    for (size_t i = pos_; i < tokens_.size(); i++) {
+        if (tokens_[i].kind == TOK_NEWLINE || tokens_[i].kind == TOK_EOF) break;
+        if (tokens_[i].kind == TOK_FILENAME) return true;
+    }
+    return false;
+}
+
+// ファイル書き込み: expr > filename / filename < expr
+Node* Parser::parseFileWrite(int line) {
+    // Case: filename > expr または filename < expr
+    if (peek().kind == TOK_FILENAME) {
+        std::string filename = advance().value;
+        if (!atEnd() && (peek().kind == TOK_GT || peek().kind == TOK_LT)) {
+            advance(); // > or <
+            Expr* val = parseExpr();
+            return new FileWriteNode(filename, val, line);
+        }
+        return NULL;
+    }
+    // Case: expr > filename または expr < filename
+    Expr* val = parseExpr();
+    if (!atEnd() && (peek().kind == TOK_GT || peek().kind == TOK_LT)) {
+        advance(); // > or <
+        if (!atEnd() && peek().kind == TOK_FILENAME) {
+            std::string filename = advance().value;
+            return new FileWriteNode(filename, val, line);
+        }
+    }
+    return new ExprOutputNode(val, line);
+}
+
 // IDENT ( params ) { の形か判定（関数定義）
 bool Parser::lineHasFuncDef() const {
     size_t i = pos_;
@@ -340,6 +372,12 @@ Node* Parser::parseCondOrLoop(int line) {
 
 Node* Parser::parseOneStmt() {
     int startLine = peek().line;
+
+    // ファイル書き込みチェック（最優先）
+    if (lineHasFilename()) {
+        return parseFileWrite(startLine);
+    }
+
     TokenKind firstKind = peek().kind;
 
     if (firstKind == TOK_LARROW) {

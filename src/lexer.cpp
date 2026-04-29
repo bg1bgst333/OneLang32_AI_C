@@ -75,6 +75,17 @@ Token Lexer::readIdent() {
     return Token(TOK_IDENT, val, startLine);
 }
 
+// 既知のファイル拡張子か判定
+bool Lexer::isFileExtension(const std::string& ext) const {
+    static const char* exts[] = {
+        "txt", "csv", "log", "json", "xml", "md",
+        "ini", "cfg", "dat", "out", "html", "htm", "css", NULL
+    };
+    for (int i = 0; exts[i]; i++)
+        if (ext == exts[i]) return true;
+    return false;
+}
+
 // クォートなし・行末まで（スペース込みの文字列）
 Token Lexer::readUnquotedLine() {
     int startLine = line_;
@@ -210,6 +221,18 @@ Token Lexer::nextToken() {
         // キーワードチェック
         if (ident.value == "o") {
             return Token(TOK_LOOP, "o", ident.line);
+        }
+        // ファイル名チェック: IDENT直後に.ext (スペースなし) があればTOK_FILENAME
+        if (!atEnd() && peek() == '.') {
+            size_t dotPos = pos_;
+            advance(); // .
+            std::string ext;
+            while (!atEnd() && std::isalpha((unsigned char)peek()))
+                ext += advance();
+            if (isFileExtension(ext)) {
+                return Token(TOK_FILENAME, ident.value + "." + ext, ident.line);
+            }
+            pos_ = dotPos; // 巻き戻し
         }
         // 識別子の後ろ（スペース除く）を確認
         size_t tmpPos = pos_;
