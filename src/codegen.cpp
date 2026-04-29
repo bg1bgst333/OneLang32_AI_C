@@ -433,6 +433,23 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
         out << indent << n->name << "[(int)(" << genExpr(n->index) << ")] = "
             << genExpr(n->value) << ";\n";
 
+    } else if (node->kind == NODE_FILE_WRITE) {
+        FileWriteNode* n = static_cast<FileWriteNode*>(node);
+        out << indent << "{\n";
+        out << indent << "    std::ofstream _one_fw(\"" << escapeString(n->filename) << "\");\n";
+        // 未定義変数はリテラル文字列として扱う
+        if (n->value->kind == EXPR_VAR &&
+            varTypes_.count(static_cast<const VarExpr*>(n->value)->name) == 0) {
+            const std::string& name = static_cast<const VarExpr*>(n->value)->name;
+            out << indent << "    _one_fw << \"" << escapeString(name) << "\";\n";
+        } else if (isStringExpr(n->value)) {
+            std::string buf = genStrExpr(out, n->value, indent + "    ");
+            out << indent << "    _one_fw << " << buf << ";\n";
+        } else {
+            out << indent << "    _one_fw << " << genExpr(n->value) << ";\n";
+        }
+        out << indent << "}\n";
+
     } else if (node->kind == NODE_METHOD_CALL_STMT) {
         MethodCallStmtNode* n = static_cast<MethodCallStmtNode*>(node);
         if (n->method == "add") {
@@ -508,6 +525,7 @@ std::string CodeGen::generate(const Program& prog) {
     out << "#include <stdio.h>\n";
     out << "#include <string.h>\n";
     out << "#include <vector>\n";
+    out << "#include <fstream>\n";
     out << "#include <windows.h>\n";
     out << "#undef min\n#undef max\n\n";
 

@@ -23,7 +23,8 @@ enum NodeKind {
     NODE_RETURN,           // <- 式
     NODE_FUNC_CALL_STMT,   // func(args) 文として呼び出し
     NODE_INDEX_ASSIGN,     // a[i] = 式
-    NODE_METHOD_CALL_STMT  // a.add(x) 文として呼び出し
+    NODE_METHOD_CALL_STMT, // a.add(x) 文として呼び出し
+    NODE_FILE_WRITE        // 値 > ファイル名 / ファイル名 < 値
 };
 
 struct Node {
@@ -286,6 +287,15 @@ struct ReturnNode : public Node {
     Expr* expr; // NULL = 値なし return
     ReturnNode(Expr* e, int l) : Node(NODE_RETURN, l), expr(e) {}
     ~ReturnNode() { delete expr; }
+};
+
+// ファイル書き込みノード: 値 > "file.txt" / "file.txt" < 値
+struct FileWriteNode : public Node {
+    std::string filename;
+    Expr* value;
+    FileWriteNode(const std::string& f, Expr* v, int l)
+        : Node(NODE_FILE_WRITE, l), filename(f), value(v) {}
+    ~FileWriteNode() { delete value; }
 };
 
 // 関数呼び出し文: func(args)（戻り値不使用）

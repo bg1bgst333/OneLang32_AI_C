@@ -29,6 +29,8 @@ private:
     int  lineSemicolonCount() const;
     bool isCompoundAssignOp(TokenKind k) const;
     bool lineHasFuncDef() const;
+    bool lineHasFilename() const;
+    Node* parseFileWrite(int line);
     Expr* parseLogicExpr();   // & |
     Expr* parseCompareExpr(); // 比較演算子
     Expr* parseExpr();        // + -

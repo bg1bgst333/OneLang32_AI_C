@@ -40,6 +40,7 @@ enum TokenKind {
     TOK_DOT,      // .
     TOK_LBRACKET, // [
     TOK_RBRACKET, // ]
+    TOK_FILENAME, // ファイル名 (例: aa.txt)
     TOK_NEWLINE,  // 改行 (文のセパレータ)
     TOK_EOF
 };
@@ -72,6 +73,7 @@ private:
     Token readIdent();
     Token readUnquotedLine();
     Token nextToken();
+    bool isFileExtension(const std::string& ext) const;
 };
 
 } // namespace one

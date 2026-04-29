@@ -1,2 +1,6 @@
 *.exe
 *.o
+*.txt
+*.csv
+*.log
+*.out
