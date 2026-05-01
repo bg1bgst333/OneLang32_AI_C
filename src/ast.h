@@ -52,7 +52,7 @@ struct NumberOutputNode : public Node {
 };
 
 // 変数の値の種類
-enum ValKind { VAL_INT, VAL_FLOAT, VAL_STRING, VAL_LIST };
+enum ValKind { VAL_INT, VAL_FLOAT, VAL_STRING, VAL_LIST, VAL_MAP };
 
 // 代入ノード: x = 値
 struct AssignNode : public Node {
@@ -80,7 +80,7 @@ struct InputNode : public Node {
 // ── 式ノード ──────────────────────────────────────────────
 
 enum ExprKind { EXPR_NUMBER, EXPR_VAR, EXPR_BINARY, EXPR_COMPARE, EXPR_LOGIC, EXPR_NOT, EXPR_STRING, EXPR_FUNC_CALL,
-                EXPR_LIST, EXPR_INDEX, EXPR_MEMBER, EXPR_METHOD_CALL };
+                EXPR_LIST, EXPR_INDEX, EXPR_MEMBER, EXPR_METHOD_CALL, EXPR_MAP };
 
 struct Expr {
     ExprKind kind;
@@ -218,6 +218,13 @@ struct ListExpr : Expr {
     std::vector<Expr*> elems;
     ListExpr() : Expr(EXPR_LIST) {}
     ~ListExpr() { for (size_t i = 0; i < elems.size(); i++) delete elems[i]; }
+};
+
+// マップリテラル式: ["key": value, ...]
+struct MapExpr : Expr {
+    std::vector<std::pair<std::string, Expr*> > pairs;
+    MapExpr() : Expr(EXPR_MAP) {}
+    ~MapExpr() { for (size_t i = 0; i < pairs.size(); i++) delete pairs[i].second; }
 };
 
 // インデックスアクセス式: a[i]

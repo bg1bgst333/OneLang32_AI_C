@@ -60,6 +60,8 @@ std::string CodeGen::genExpr(const Expr* e) {
     }
     if (e->kind == EXPR_INDEX) {
         const IndexExpr* ix = static_cast<const IndexExpr*>(e);
+        if (varTypes_.count(ix->name) && varTypes_.at(ix->name) == VAL_MAP)
+            return ix->name + "[" + genExpr(ix->index) + "].c_str()";
         return ix->name + "[(int)(" + genExpr(ix->index) + ")]";
     }
     if (e->kind == EXPR_MEMBER) {
@@ -105,6 +107,10 @@ bool CodeGen::isStringExpr(const Expr* e) {
         const VarExpr* v = static_cast<const VarExpr*>(e);
         return varTypes_.count(v->name) && varTypes_.at(v->name) == VAL_STRING;
     }
+    if (e->kind == EXPR_INDEX) {
+        const IndexExpr* ix = static_cast<const IndexExpr*>(e);
+        return varTypes_.count(ix->name) && varTypes_.at(ix->name) == VAL_MAP;
+    }
     if (e->kind == EXPR_BINARY) {
         const BinaryExpr* b = static_cast<const BinaryExpr*>(e);
         return b->op == '+' && (isStringExpr(b->left) || isStringExpr(b->right));
@@ -136,6 +142,14 @@ void CodeGen::collectStrParts(const Expr* e, std::string& fmt, std::vector<std::
         args.push_back(n->raw);
         return;
     }
+    if (e->kind == EXPR_INDEX) {
+        const IndexExpr* ix = static_cast<const IndexExpr*>(e);
+        if (varTypes_.count(ix->name) && varTypes_.at(ix->name) == VAL_MAP) {
+            fmt += "%s";
+            args.push_back(ix->name + "[" + genExpr(ix->index) + "].c_str()");
+            return;
+        }
+    }
     if (e->kind == EXPR_BINARY) {
         const BinaryExpr* b = static_cast<const BinaryExpr*>(e);
         collectStrParts(b->left, fmt, args);
@@ -146,6 +160,18 @@ void CodeGen::collectStrParts(const Expr* e, std::string& fmt, std::vector<std::
 
 // 文字列連結式のコードを生成してバッファ変数名を返す
 std::string CodeGen::genStrExpr(std::ostringstream& out, const Expr* e, const std::string& indent) {
+    // マップアクセス: a["key"] → const char*
+    if (e->kind == EXPR_INDEX) {
+        const IndexExpr* ix = static_cast<const IndexExpr*>(e);
+        if (varTypes_.count(ix->name) && varTypes_.at(ix->name) == VAL_MAP) {
+            std::ostringstream idxss;
+            idxss << strTmpCount_++;
+            std::string bufName = "_one_str_" + idxss.str();
+            out << indent << "const char* " << bufName << " = "
+                << ix->name << "[" << genExpr(ix->index) << "].c_str();\n";
+            return bufName;
+        }
+    }
     std::ostringstream idxss;
     idxss << strTmpCount_++;
     std::string bufName = "_one_str_" + idxss.str();
@@ -175,7 +201,13 @@ std::string CodeGen::genStrExpr(std::ostringstream& out, const Expr* e, const st
 // 式の型を推論
 ValKind CodeGen::exprType(const Expr* e) {
     if (e->kind == EXPR_LIST)        return VAL_LIST;
-    if (e->kind == EXPR_INDEX)       return VAL_FLOAT; // リスト要素はdouble
+    if (e->kind == EXPR_MAP)         return VAL_MAP;
+    if (e->kind == EXPR_INDEX) {
+        const IndexExpr* ix = static_cast<const IndexExpr*>(e);
+        if (varTypes_.count(ix->name) && varTypes_.at(ix->name) == VAL_MAP)
+            return VAL_STRING;
+        return VAL_FLOAT; // リスト要素はdouble
+    }
     if (e->kind == EXPR_MEMBER)      return VAL_INT;   // .len はint
     if (e->kind == EXPR_METHOD_CALL) return VAL_INT;
     if (e->kind == EXPR_FUNC_CALL) {
@@ -285,7 +317,6 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
             return;
         }
         if (n->expr->kind == EXPR_MEMBER) {
-            // a.len など整数プロパティ
             out << indent << "printf(\"%d\\n\", " << genExpr(n->expr) << ");\n";
             return;
         }
@@ -300,7 +331,27 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
         ExprAssignNode* n = static_cast<ExprAssignNode*>(node);
         ValKind vk = exprType(n->expr);
         bool declared = varTypes_.count(n->varName) > 0;
-        if (vk == VAL_LIST) {
+        if (vk == VAL_MAP) {
+            // マップリテラル代入: std::map<std::string,std::string> a; a[k]=v; ...
+            const MapExpr* me = static_cast<const MapExpr*>(n->expr);
+            if (!declared)
+                out << indent << "std::map<std::string, std::string> " << n->varName << ";\n";
+            for (size_t i = 0; i < me->pairs.size(); i++) {
+                const std::string& key = me->pairs[i].first;
+                Expr* val = me->pairs[i].second;
+                if (isStringExpr(val)) {
+                    std::string buf = genStrExpr(out, val, indent);
+                    out << indent << n->varName << "[\"" << escapeString(key) << "\"] = " << buf << ";\n";
+                } else {
+                    std::ostringstream idxss; idxss << strTmpCount_++;
+                    std::string nb = "_one_nb_" + idxss.str();
+                    out << indent << "{ char " << nb << "[64]; snprintf(" << nb << ", 64, \"%g\", (double)("
+                        << genExpr(val) << ")); "
+                        << n->varName << "[\"" << escapeString(key) << "\"] = " << nb << "; }\n";
+                }
+            }
+            varTypes_[n->varName] = VAL_MAP;
+        } else if (vk == VAL_LIST) {
             // リストリテラル代入: std::vector<double> a = {elems};
             const ListExpr* le = static_cast<const ListExpr*>(n->expr);
             if (!declared)
@@ -430,8 +481,26 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
 
     } else if (node->kind == NODE_INDEX_ASSIGN) {
         IndexAssignNode* n = static_cast<IndexAssignNode*>(node);
-        out << indent << n->name << "[(int)(" << genExpr(n->index) << ")] = "
-            << genExpr(n->value) << ";\n";
+        // 文字列キー → マップ（未宣言なら自動宣言）
+        if (isStringExpr(n->index)) {
+            if (varTypes_.count(n->name) == 0) {
+                out << indent << "std::map<std::string, std::string> " << n->name << ";\n";
+                varTypes_[n->name] = VAL_MAP;
+            }
+            if (isStringExpr(n->value)) {
+                std::string buf = genStrExpr(out, n->value, indent);
+                out << indent << n->name << "[" << genExpr(n->index) << "] = " << buf << ";\n";
+            } else {
+                std::ostringstream idxss; idxss << strTmpCount_++;
+                std::string nb = "_one_nb_" + idxss.str();
+                out << indent << "{ char " << nb << "[64]; snprintf(" << nb << ", 64, \"%g\", (double)("
+                    << genExpr(n->value) << ")); "
+                    << n->name << "[" << genExpr(n->index) << "] = " << nb << "; }\n";
+            }
+        } else {
+            out << indent << n->name << "[(int)(" << genExpr(n->index) << ")] = "
+                << genExpr(n->value) << ";\n";
+        }
 
     } else if (node->kind == NODE_FILE_WRITE) {
         FileWriteNode* n = static_cast<FileWriteNode*>(node);
@@ -489,13 +558,27 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
     } else if (node->kind == NODE_METHOD_CALL_STMT) {
         MethodCallStmtNode* n = static_cast<MethodCallStmtNode*>(node);
         if (n->method == "add") {
-            // a.add(x) → a.push_back(x)
-            out << indent << n->name << ".push_back(";
-            for (size_t i = 0; i < n->args.size(); i++) {
-                if (i > 0) out << ", ";
-                out << genExpr(n->args[i]);
+            if (n->args.size() == 2) {
+                // a.add("key", val) → マップ追加
+                if (isStringExpr(n->args[1])) {
+                    std::string buf = genStrExpr(out, n->args[1], indent);
+                    out << indent << n->name << "[" << genExpr(n->args[0]) << "] = " << buf << ";\n";
+                } else {
+                    std::ostringstream idxss; idxss << strTmpCount_++;
+                    std::string nb = "_one_nb_" + idxss.str();
+                    out << indent << "{ char " << nb << "[64]; snprintf(" << nb << ", 64, \"%g\", (double)("
+                        << genExpr(n->args[1]) << ")); "
+                        << n->name << "[" << genExpr(n->args[0]) << "] = " << nb << "; }\n";
+                }
+            } else {
+                // a.add(x) → a.push_back(x)
+                out << indent << n->name << ".push_back(";
+                for (size_t i = 0; i < n->args.size(); i++) {
+                    if (i > 0) out << ", ";
+                    out << genExpr(n->args[i]);
+                }
+                out << ");\n";
             }
-            out << ");\n";
         }
     }
 }
@@ -561,6 +644,8 @@ std::string CodeGen::generate(const Program& prog) {
     out << "#include <stdio.h>\n";
     out << "#include <string.h>\n";
     out << "#include <vector>\n";
+    out << "#include <map>\n";
+    out << "#include <string>\n";
     out << "#include <fstream>\n";
     out << "#include <windows.h>\n";
     out << "#undef min\n#undef max\n\n";
