@@ -1,0 +1,13 @@
+# まず上書きで初期化
+"Line 1\n" > append.txt
+
+# >> で追記
+"Line 2\n" >> append.txt
+"Line 3\n" >> append.txt
+
+# 逆向き追記
+append.txt << "Line 4\n"
+
+# 追記結果を読み込んで表示
+result < append.txt
+result

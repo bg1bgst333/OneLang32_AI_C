@@ -25,7 +25,8 @@ enum NodeKind {
     NODE_INDEX_ASSIGN,     // a[i] = 式
     NODE_METHOD_CALL_STMT, // a.add(x) 文として呼び出し
     NODE_FILE_WRITE,       // 値 > ファイル名 / ファイル名 < 値
-    NODE_FILE_READ         // 変数 < ファイル名 / ファイル名 > 変数
+    NODE_FILE_READ,        // 変数 < ファイル名 / ファイル名 > 変数
+    NODE_FILE_APPEND       // 値 >> ファイル名 / ファイル名 << 値
 };
 
 struct Node {
@@ -297,6 +298,15 @@ struct FileWriteNode : public Node {
     FileWriteNode(const std::string& f, Expr* v, int l)
         : Node(NODE_FILE_WRITE, l), filename(f), value(v) {}
     ~FileWriteNode() { delete value; }
+};
+
+// ファイル追記ノード: 値 >> "file.txt" / "file.txt" << 値
+struct FileAppendNode : public Node {
+    std::string filename;
+    Expr* value;
+    FileAppendNode(const std::string& f, Expr* v, int l)
+        : Node(NODE_FILE_APPEND, l), filename(f), value(v) {}
+    ~FileAppendNode() { delete value; }
 };
 
 // ファイル読み込みノード: 変数 < "file.txt" / "file.txt" > 変数

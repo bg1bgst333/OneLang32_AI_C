@@ -30,7 +30,9 @@ private:
     bool isCompoundAssignOp(TokenKind k) const;
     bool lineHasFuncDef() const;
     bool lineHasFilename() const;
+    bool lineHasAppendOp() const;
     Node* parseFileWrite(int line);
+    Node* parseFileAppend(int line);
     Expr* parseLogicExpr();   // & |
     Expr* parseCompareExpr(); // 比較演算子
     Expr* parseExpr();        // + -
