@@ -75,6 +75,38 @@ bool Parser::lineHasFilename() const {
     return false;
 }
 
+bool Parser::lineHasAppendOp() const {
+    for (size_t i = pos_; i < tokens_.size(); i++) {
+        if (tokens_[i].kind == TOK_NEWLINE || tokens_[i].kind == TOK_EOF) break;
+        if (tokens_[i].kind == TOK_RSHIFT || tokens_[i].kind == TOK_LSHIFT) return true;
+    }
+    return false;
+}
+
+// ファイル追記: expr >> filename / filename << expr
+Node* Parser::parseFileAppend(int line) {
+    if (peek().kind == TOK_FILENAME) {
+        // filename << expr
+        std::string filename = advance().value;
+        if (!atEnd() && peek().kind == TOK_LSHIFT) {
+            advance(); // <<
+            Expr* val = parseExpr();
+            return new FileAppendNode(filename, val, line);
+        }
+        return NULL;
+    }
+    // expr >> filename
+    Expr* val = parseExpr();
+    if (!atEnd() && peek().kind == TOK_RSHIFT) {
+        advance(); // >>
+        if (!atEnd() && peek().kind == TOK_FILENAME) {
+            std::string filename = advance().value;
+            return new FileAppendNode(filename, val, line);
+        }
+    }
+    return new ExprOutputNode(val, line);
+}
+
 // ファイル書き込み/読み込み: expr > filename / filename < expr / var < filename / filename > var
 Node* Parser::parseFileWrite(int line) {
     // Case: filename で始まる行
@@ -389,8 +421,10 @@ Node* Parser::parseCondOrLoop(int line) {
 Node* Parser::parseOneStmt() {
     int startLine = peek().line;
 
-    // ファイル書き込みチェック（最優先）
+    // ファイル書き込み/追記/読み込みチェック（最優先）
     if (lineHasFilename()) {
+        if (lineHasAppendOp())
+            return parseFileAppend(startLine);
         return parseFileWrite(startLine);
     }
 

@@ -450,6 +450,22 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
         }
         out << indent << "}\n";
 
+    } else if (node->kind == NODE_FILE_APPEND) {
+        FileAppendNode* n = static_cast<FileAppendNode*>(node);
+        out << indent << "{\n";
+        out << indent << "    std::ofstream _one_fa(\"" << escapeString(n->filename) << "\", std::ios::app);\n";
+        if (n->value->kind == EXPR_VAR &&
+            varTypes_.count(static_cast<const VarExpr*>(n->value)->name) == 0) {
+            const std::string& name = static_cast<const VarExpr*>(n->value)->name;
+            out << indent << "    _one_fa << \"" << escapeString(name) << "\";\n";
+        } else if (isStringExpr(n->value)) {
+            std::string buf = genStrExpr(out, n->value, indent + "    ");
+            out << indent << "    _one_fa << " << buf << ";\n";
+        } else {
+            out << indent << "    _one_fa << " << genExpr(n->value) << ";\n";
+        }
+        out << indent << "}\n";
+
     } else if (node->kind == NODE_FILE_READ) {
         FileReadNode* n = static_cast<FileReadNode*>(node);
         std::string buf = "_one_rfbuf_" + n->varName;

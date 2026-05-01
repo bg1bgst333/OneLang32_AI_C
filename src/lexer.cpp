@@ -158,18 +158,20 @@ Token Lexer::nextToken() {
         return Token(TOK_MINUS, "-", line_);
     }
 
-    // > >=
+    // > >= >>
     if (c == '>') {
         advance();
-        if (!atEnd() && peek() == '=') { advance(); return Token(TOK_GTE, ">=", line_); }
+        if (!atEnd() && peek() == '=') { advance(); return Token(TOK_GTE,    ">=", line_); }
+        if (!atEnd() && peek() == '>') { advance(); return Token(TOK_RSHIFT,  ">>", line_); }
         return Token(TOK_GT, ">", line_);
     }
 
-    // < <= <-
+    // < <= <- <<
     if (c == '<') {
         advance();
         if (!atEnd() && peek() == '=') { advance(); return Token(TOK_LTE,    "<=", line_); }
         if (!atEnd() && peek() == '-') { advance(); return Token(TOK_LARROW,  "<-", line_); }
+        if (!atEnd() && peek() == '<') { advance(); return Token(TOK_LSHIFT,  "<<", line_); }
         return Token(TOK_LT, "<", line_);
     }
 

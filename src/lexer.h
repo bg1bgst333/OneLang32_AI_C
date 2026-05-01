@@ -36,6 +36,8 @@ enum TokenKind {
     TOK_STAR_ASSIGN,  // *=
     TOK_SLASH_ASSIGN, // /=
     TOK_LARROW,   // <- (return)
+    TOK_RSHIFT,   // >> (ファイル追記)
+    TOK_LSHIFT,   // << (ファイル追記・逆向き)
     TOK_COMMA,    // ,
     TOK_DOT,      // .
     TOK_LBRACKET, // [
