@@ -38,6 +38,8 @@ enum TokenKind {
     TOK_LARROW,   // <- (return)
     TOK_RSHIFT,   // >> (ファイル追記)
     TOK_LSHIFT,   // << (ファイル追記・逆向き)
+    TOK_BREAK,    // >< (break)
+    TOK_CONTINUE, // -^ (continue)
     TOK_COMMA,    // ,
     TOK_DOT,      // .
     TOK_LBRACKET, // [

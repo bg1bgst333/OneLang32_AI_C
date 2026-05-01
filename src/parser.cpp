@@ -430,7 +430,15 @@ Node* Parser::parseOneStmt() {
 
     TokenKind firstKind = peek().kind;
 
-    if (firstKind == TOK_LARROW) {
+    if (firstKind == TOK_BREAK) {
+        advance();
+        return new BreakNode(startLine);
+
+    } else if (firstKind == TOK_CONTINUE) {
+        advance();
+        return new ContinueNode(startLine);
+
+    } else if (firstKind == TOK_LARROW) {
         // <- 式 → return
         advance();
         if (atEnd() || peek().kind == TOK_NEWLINE) return new ReturnNode(NULL, startLine);
