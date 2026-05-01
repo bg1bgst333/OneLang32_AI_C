@@ -1,0 +1,11 @@
+# まず書き込んでから読み込む
+"Hello, One!" > msg.txt
+
+# 変数 < ファイル名 で読み込み
+content < msg.txt
+content
+
+# ファイル名 > 変数 で読み込み（逆向き）
+"Goodbye!" > msg2.txt
+msg2.txt > data
+data

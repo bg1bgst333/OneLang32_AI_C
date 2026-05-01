@@ -75,19 +75,35 @@ bool Parser::lineHasFilename() const {
     return false;
 }
 
-// ファイル書き込み: expr > filename / filename < expr
+// ファイル書き込み/読み込み: expr > filename / filename < expr / var < filename / filename > var
 Node* Parser::parseFileWrite(int line) {
-    // Case: filename > expr または filename < expr
+    // Case: filename で始まる行
     if (peek().kind == TOK_FILENAME) {
         std::string filename = advance().value;
-        if (!atEnd() && (peek().kind == TOK_GT || peek().kind == TOK_LT)) {
-            advance(); // > or <
+        if (!atEnd() && peek().kind == TOK_LT) {
+            // filename < expr → 書き込み
+            advance(); // <
             Expr* val = parseExpr();
             return new FileWriteNode(filename, val, line);
+        } else if (!atEnd() && peek().kind == TOK_GT) {
+            // filename > ident → 読み込み
+            advance(); // >
+            if (!atEnd() && peek().kind == TOK_IDENT) {
+                std::string varName = advance().value;
+                return new FileReadNode(filename, varName, line);
+            }
         }
         return NULL;
     }
-    // Case: expr > filename または expr < filename
+    // Case: expr / ident で始まる行
+    // ident < filename → 読み込み (先読みして判定)
+    if (peek().kind == TOK_IDENT && peekAt(1).kind == TOK_LT && peekAt(2).kind == TOK_FILENAME) {
+        std::string varName = advance().value; // ident
+        advance(); // <
+        std::string filename = advance().value; // filename
+        return new FileReadNode(filename, varName, line);
+    }
+    // expr > filename → 書き込み
     Expr* val = parseExpr();
     if (!atEnd() && (peek().kind == TOK_GT || peek().kind == TOK_LT)) {
         advance(); // > or <
