@@ -553,16 +553,46 @@ Node* Parser::parseOneStmt() {
     return NULL;
 }
 
-// リストリテラル: [elem, elem, ...]
+// リスト/マップリテラル: [elem, ...] / [:] / ["key": value, ...]
 Expr* Parser::parseListLiteral() {
     advance(); // [ を消費
+
+    // [:] → 空マップ
+    if (!atEnd() && peek().kind == TOK_COLON) {
+        advance(); // :
+        if (!atEnd() && peek().kind == TOK_RBRACKET) advance(); // ]
+        return new MapExpr();
+    }
+
+    // [] → 空リスト
+    if (!atEnd() && peek().kind == TOK_RBRACKET) {
+        advance(); // ]
+        return new ListExpr();
+    }
+
+    // ["key": value, ...] → マップリテラル (先頭が STRING: なら)
+    if (peek().kind == TOK_STRING && peekAt(1).kind == TOK_COLON) {
+        MapExpr* map = new MapExpr();
+        while (!atEnd() && peek().kind != TOK_RBRACKET) {
+            if (peek().kind == TOK_NEWLINE || peek().kind == TOK_EOF) break;
+            std::string key = advance().value; // string key
+            if (!atEnd() && peek().kind == TOK_COLON) advance(); // :
+            Expr* val = parseExpr();
+            map->pairs.push_back(std::make_pair(key, val));
+            if (!atEnd() && peek().kind == TOK_COMMA) advance();
+        }
+        if (!atEnd() && peek().kind == TOK_RBRACKET) advance(); // ]
+        return map;
+    }
+
+    // [elem, elem, ...] → リストリテラル
     ListExpr* list = new ListExpr();
     while (!atEnd() && peek().kind != TOK_RBRACKET) {
         if (peek().kind == TOK_NEWLINE || peek().kind == TOK_EOF) break;
         list->elems.push_back(parseExpr());
         if (!atEnd() && peek().kind == TOK_COMMA) advance();
     }
-    if (!atEnd() && peek().kind == TOK_RBRACKET) advance(); // ] を消費
+    if (!atEnd() && peek().kind == TOK_RBRACKET) advance(); // ]
     return list;
 }
 
