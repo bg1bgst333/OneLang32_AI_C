@@ -459,6 +459,12 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
         }
         out << indent << "}\n";
 
+    } else if (node->kind == NODE_BREAK) {
+        out << indent << "break;\n";
+
+    } else if (node->kind == NODE_CONTINUE) {
+        out << indent << "continue;\n";
+
     } else if (node->kind == NODE_RETURN) {
         ReturnNode* n = static_cast<ReturnNode*>(node);
         if (!n->expr) {

@@ -26,7 +26,9 @@ enum NodeKind {
     NODE_METHOD_CALL_STMT, // a.add(x) 文として呼び出し
     NODE_FILE_WRITE,       // 値 > ファイル名 / ファイル名 < 値
     NODE_FILE_READ,        // 変数 < ファイル名 / ファイル名 > 変数
-    NODE_FILE_APPEND       // 値 >> ファイル名 / ファイル名 << 値
+    NODE_FILE_APPEND,      // 値 >> ファイル名 / ファイル名 << 値
+    NODE_BREAK,            // ><
+    NODE_CONTINUE          // -^
 };
 
 struct Node {
@@ -322,6 +324,16 @@ struct FileReadNode : public Node {
     std::string varName;
     FileReadNode(const std::string& f, const std::string& v, int l)
         : Node(NODE_FILE_READ, l), filename(f), varName(v) {}
+};
+
+// break ノード: ><
+struct BreakNode : public Node {
+    explicit BreakNode(int l) : Node(NODE_BREAK, l) {}
+};
+
+// continue ノード: -^
+struct ContinueNode : public Node {
+    explicit ContinueNode(int l) : Node(NODE_CONTINUE, l) {}
 };
 
 // 関数呼び出し文: func(args)（戻り値不使用）

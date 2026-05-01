@@ -142,7 +142,7 @@ Token Lexer::nextToken() {
         return Token(TOK_SLASH, "/", line_);
     }
 
-    // -> / -= / 負の数値 / マイナス
+    // -> / -= / -^ / 負の数値 / マイナス
     if (c == '-') {
         if (pos_ + 1 < src_.size() && src_[pos_ + 1] == '>') {
             advance(); advance();
@@ -152,17 +152,22 @@ Token Lexer::nextToken() {
             advance(); advance();
             return Token(TOK_MINUS_ASSIGN, "-=", line_);
         }
+        if (pos_ + 1 < src_.size() && src_[pos_ + 1] == '^') {
+            advance(); advance();
+            return Token(TOK_CONTINUE, "-^", line_);
+        }
         if (pos_ + 1 < src_.size() && std::isdigit((unsigned char)src_[pos_ + 1]))
             return readNumber();
         advance();
         return Token(TOK_MINUS, "-", line_);
     }
 
-    // > >= >>
+    // > >= >> ><
     if (c == '>') {
         advance();
         if (!atEnd() && peek() == '=') { advance(); return Token(TOK_GTE,    ">=", line_); }
         if (!atEnd() && peek() == '>') { advance(); return Token(TOK_RSHIFT,  ">>", line_); }
+        if (!atEnd() && peek() == '<') { advance(); return Token(TOK_BREAK,   "><", line_); }
         return Token(TOK_GT, ">", line_);
     }
 
