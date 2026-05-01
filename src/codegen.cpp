@@ -450,6 +450,26 @@ void CodeGen::emitStmt(std::ostringstream& out, Node* node, const std::string& i
         }
         out << indent << "}\n";
 
+    } else if (node->kind == NODE_FILE_READ) {
+        FileReadNode* n = static_cast<FileReadNode*>(node);
+        std::string buf = "_one_rfbuf_" + n->varName;
+        bool declared = varTypes_.count(n->varName) > 0;
+        if (!declared)
+            out << indent << "char " << buf << "[4096] = {0};\n";
+        out << indent << "{\n";
+        out << indent << "    FILE* _one_rfp = fopen(\"" << escapeString(n->filename) << "\", \"r\");\n";
+        out << indent << "    if (_one_rfp) {\n";
+        out << indent << "        fread(" << buf << ", 1, sizeof(" << buf << ")-1, _one_rfp);\n";
+        out << indent << "        fclose(_one_rfp);\n";
+        out << indent << "        size_t _one_rfl = strlen(" << buf << ");\n";
+        out << indent << "        while (_one_rfl > 0 && (" << buf << "[_one_rfl-1] == '\\n' || "
+            << buf << "[_one_rfl-1] == '\\r')) " << buf << "[--_one_rfl] = '\\0';\n";
+        out << indent << "    }\n";
+        out << indent << "}\n";
+        if (!declared)
+            out << indent << "const char* " << n->varName << " = " << buf << ";\n";
+        varTypes_[n->varName] = VAL_STRING;
+
     } else if (node->kind == NODE_METHOD_CALL_STMT) {
         MethodCallStmtNode* n = static_cast<MethodCallStmtNode*>(node);
         if (n->method == "add") {
